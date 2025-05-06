@@ -1,3 +1,7 @@
 .env
+launch.json
+tasks.json
 __pycache__/
 *.pyc
+config.py
+trash.txt
