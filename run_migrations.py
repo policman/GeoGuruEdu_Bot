@@ -7,6 +7,8 @@ from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String
 
 from bot.database.migrations.users import users
 from bot.database.migrations.events import events
+from bot.database.migrations.participants import event_participants
+
 
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -14,6 +16,8 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 metadata = MetaData()
 users.tometadata(metadata)
 events.tometadata(metadata)
+event_participants.tometadata(metadata)
+
 
 # Добавим таблицу версий миграций
 migrations_table = Table(
