@@ -9,3 +9,8 @@ class EventCreation(StatesGroup):
     waiting_for_photos = State()
     waiting_for_videos = State()
     confirmation = State()
+
+
+class MyEventsView(StatesGroup):
+    choosing_category = State()
+    viewing_events = State()

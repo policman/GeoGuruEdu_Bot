@@ -15,3 +15,12 @@ confirm_skip_video_keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True,
     one_time_keyboard=True
 )
+
+my_events_keyboard = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton("📌 Активные"), KeyboardButton("🛠 Созданные")],
+        [KeyboardButton("📦 Архивные")],
+        [KeyboardButton("⬅️ Назад")]
+    ],
+    resize_keyboard=True
+)
