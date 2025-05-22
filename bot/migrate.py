@@ -1,5 +1,5 @@
 import asyncio
-from bot.services.migrations import run_migration
+from run_migrations import main as run_migration
 
 if __name__ == "__main__":
     asyncio.run(run_migration())

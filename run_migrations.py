@@ -13,11 +13,13 @@ from bot.database.migrations.participants import event_participants
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+if not DATABASE_URL:
+    raise ValueError("❌ DATABASE_URL не установлена в переменных окружения.")
+
 metadata = MetaData()
 users.tometadata(metadata)
 events.tometadata(metadata)
 event_participants.tometadata(metadata)
-
 
 # Добавим таблицу версий миграций
 migrations_table = Table(
@@ -30,6 +32,7 @@ migrations_table = Table(
 
 migrations_table.tometadata(metadata)
 engine = create_engine(DATABASE_URL)
+
 
 MIGRATION_LOG_FILE = "migration.log"
 

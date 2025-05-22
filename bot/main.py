@@ -1,36 +1,55 @@
-from aiogram import Bot, Dispatcher, executor, types
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from dotenv import load_dotenv
+import asyncio
 import os
 
-# Загрузка переменных окружения
-load_dotenv()
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+from aiogram import Bot, Dispatcher
+from aiogram.enums import ParseMode
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand
+from dotenv import load_dotenv
 
-# Инициализация бота, хранилища и диспетчера
-bot = Bot(token=BOT_TOKEN, parse_mode=types.ParseMode.HTML)
-storage = MemoryStorage()
-dp = Dispatcher(bot, storage=storage)
-
-# Импорт хендлеров
-from bot.handlers.start import register_start_handlers
-from bot.handlers.menu import register_menu_handlers
-from bot.handlers.profile import register_profile_handlers
-from bot.handlers.events import register_event_handlers
-
-register_start_handlers(dp)
-register_menu_handlers(dp)
-register_profile_handlers(dp)
-register_event_handlers(dp)
-
-# Импорт миграций
 from run_migrations import main as run_migrations_main
 
-# Функция запуска при старте бота
-async def on_startup(dp):
+async def set_default_commands(bot: Bot):
+    await bot.set_my_commands([
+        BotCommand(command="start", description="Перезапустить бота"),
+        BotCommand(command="help", description="Справка"),
+        BotCommand(command="menu", description="Показать главное меню"),
+    ])
+
+async def main():
+    load_dotenv()
+    BOT_TOKEN = os.getenv("BOT_TOKEN")
+    if not BOT_TOKEN:
+        raise ValueError("BOT_TOKEN не установлен в переменных окружения")
+
+    bot = Bot(
+        token=BOT_TOKEN,
+        parse_mode=ParseMode.HTML  # ВОТ ТАК!
+    )
+
+    storage = MemoryStorage()
+    dp = Dispatcher(storage=storage)
+
+    # Импорт хендлеров и роутеров
+    from bot.handlers import start
+    from bot.handlers.menu import router as menu_router
+    from bot.handlers import profile
+    from bot.handlers.events import router as events_router
+    from bot.handlers.learning.ai import ai_chat_router
+    from bot.handlers.learning import learning_router
+
+    dp.include_router(start.router)
+    dp.include_router(menu_router)
+    dp.include_router(profile.router)
+    dp.include_router(events_router)
+    dp.include_router(ai_chat_router)
+    dp.include_router(learning_router)
+    
+    await set_default_commands(bot)
     await run_migrations_main()
     print("🚀 Бот запущен и миграции выполнены")
 
-# Точка входа
+    await dp.start_polling(bot)
+
 if __name__ == "__main__":
-    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
+    asyncio.run(main())

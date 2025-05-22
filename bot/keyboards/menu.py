@@ -1,22 +1,20 @@
+# ✅ Файл: bot/keyboards/menu.py
+
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-# Главное меню
-main_reply_keyboard = ReplyKeyboardMarkup(
+# Главное меню (первая кнопка "Меню")
+main_menu_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="Меню")]
     ],
     resize_keyboard=True
 )
 
-# Расширенное меню
-menu_reply_keyboard = ReplyKeyboardMarkup(
+# Расширенное меню с разделами
+section_menu_keyboard = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="📚 Обучение")],
-        [KeyboardButton(text="🧪 Тестирование")],
-        [KeyboardButton(text="📊 Прогресс")],
-        [KeyboardButton(text="👤 Профиль")],
-        [KeyboardButton(text="📅 События")],
-        [KeyboardButton(text="Назад")]
+        [KeyboardButton(text="📚 Обучение"),KeyboardButton(text="📅 События")],
+        [KeyboardButton(text="👤 Профиль"),KeyboardButton(text="📊 Прогресс")]
     ],
     resize_keyboard=True
 )

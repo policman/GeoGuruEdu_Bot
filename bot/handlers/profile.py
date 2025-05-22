@@ -1,10 +1,19 @@
-from aiogram import types
-from aiogram.dispatcher import Dispatcher
+# ✅ Файл: bot/handlers/profile.py
+
+from aiogram import Router
+from aiogram.types import Message
 from bot.database.user_repo import get_user_by_telegram_id
 from bot.config import DATABASE_URL
 import asyncpg
 
-async def show_profile(message: types.Message):
+router = Router()
+
+@router.message(lambda m: m.text == "👤 Профиль")
+async def show_profile(message: Message):
+    if message.from_user is None:
+        await message.answer("⚠️ Не удалось определить пользователя.")
+        return
+
     user_id = message.from_user.id
     conn = await asyncpg.connect(DATABASE_URL)
     user = await get_user_by_telegram_id(conn, user_id)
@@ -25,6 +34,3 @@ async def show_profile(message: types.Message):
         profile_text = "⚠️ Пользователь не найден в базе данных."
 
     await message.answer(profile_text, parse_mode="HTML")
-
-def register_profile_handlers(dp: Dispatcher):
-    dp.register_message_handler(show_profile, lambda m: m.text == "👤 Профиль")
