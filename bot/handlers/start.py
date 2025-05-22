@@ -1,12 +1,16 @@
-from aiogram import types
-from aiogram.dispatcher import Dispatcher
-from bot.keyboards.menu import main_reply_keyboard
+from aiogram import Router
+from aiogram.types import Message
+from aiogram.filters import Command
+from bot.keyboards.menu import section_menu_keyboard
+from bot.keyboards.menu import main_menu_keyboard
 from bot.database.user_repo import get_user_by_telegram_id, insert_user
 from bot.config import DATABASE_URL
 import asyncpg
 from datetime import datetime
 
-def get_greeting():
+router = Router()
+
+def get_greeting() -> str:
     hour = datetime.now().hour
     if 5 <= hour < 12:
         return "Доброе утро"
@@ -17,7 +21,12 @@ def get_greeting():
     else:
         return "Доброй ночи"
 
-async def start_handler(message: types.Message):
+@router.message(Command("start"))
+async def start_handler(message: Message) -> None:
+    if message.from_user is None:
+        await message.answer("❌ Не удалось определить пользователя.")
+        return
+
     user = message.from_user
     conn = await asyncpg.connect(DATABASE_URL)
 
@@ -39,14 +48,10 @@ async def start_handler(message: types.Message):
 
     await conn.close()
 
-    # Формируем имя пользователя
     full_name = user_data['first_name']
     if user_data['middle_name']:
         full_name += f" {user_data['middle_name']}"
 
     greeting = get_greeting()
-    await message.answer(f"{greeting}, {full_name}!", reply_markup=main_reply_keyboard)
+    await message.answer(f"{greeting}, {full_name}!", reply_markup=section_menu_keyboard)
     await message.answer("🔸 Ваша активность за сегодня:\n[Заглушка для статистики]")
-
-def register_start_handlers(dp: Dispatcher):
-    dp.register_message_handler(start_handler, commands=["start"])

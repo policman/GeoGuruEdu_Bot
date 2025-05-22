@@ -1,14 +1,12 @@
-from aiogram import types
-from aiogram.dispatcher import Dispatcher
-from bot.keyboards.menu import main_reply_keyboard, menu_reply_keyboard
+# ✅ Файл: bot/handlers/menu.py
 
-async def show_menu(message: types.Message):
-    await message.answer("🔸 Выберите раздел:", reply_markup=menu_reply_keyboard)
+from aiogram import Router
+from aiogram.types import Message
+from aiogram.filters import Command
+from bot.keyboards.menu import main_menu_keyboard, section_menu_keyboard
 
-async def back_to_main(message: types.Message):
-    await message.answer("🔸 Главное меню", reply_markup=main_reply_keyboard)
-    await message.answer("🔸 Ваша активность за сегодня:\n[Заглушка для статистики]")
+router = Router()
 
-def register_menu_handlers(dp: Dispatcher):
-    dp.register_message_handler(show_menu, lambda m: m.text == "Меню")
-    dp.register_message_handler(back_to_main, lambda m: m.text == "Назад")
+@router.message(Command("menu"))
+async def show_main_menu(message: Message):
+    await message.answer("🔘 Главное меню", reply_markup=main_menu_keyboard)
