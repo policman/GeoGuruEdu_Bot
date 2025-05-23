@@ -37,6 +37,8 @@ async def main():
     from bot.handlers.events import router as events_router
     from bot.handlers.learning.ai import ai_chat_router
     from bot.handlers.learning import learning_router
+    from bot.handlers.events import manage
+    
 
     dp.include_router(start.router)
     dp.include_router(menu_router)
@@ -44,6 +46,7 @@ async def main():
     dp.include_router(events_router)
     dp.include_router(ai_chat_router)
     dp.include_router(learning_router)
+    dp.include_router(manage.router)
     
     await set_default_commands(bot)
     await run_migrations_main()
