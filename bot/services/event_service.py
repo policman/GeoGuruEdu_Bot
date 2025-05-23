@@ -13,7 +13,6 @@ class EventService:
         """, event_data['author_id'], event_data['title'], event_data['description'],
              event_data['start_date'], event_data['end_date'], event_data['organizers'],
              event_data['price'], event_data['photos'], event_data['videos'], event_data.get('is_draft', True))
-        
         if not row:
             raise RuntimeError("Не удалось добавить событие в базу данных!")
         return row["id"]
@@ -52,7 +51,18 @@ class EventService:
     async def delete_event(self, event_id: int):
         await self.conn.execute("DELETE FROM events WHERE id = $1", event_id)
 
-    async def update_event_field(self, event_id: int, field: str, value):
-        await self.conn.execute(f"UPDATE events SET {field} = $1 WHERE id = $2", value, event_id)
     async def delete_event_by_id(self, event_id: int):
         await self.conn.execute("DELETE FROM events WHERE id = $1", event_id)
+
+    # Универсальное обновление (только передаваемые поля)
+    async def update_event_fields(self, event_id, **kwargs):
+        if not kwargs:
+            return
+        fields = []
+        values = []
+        for i, (key, value) in enumerate(kwargs.items()):
+            fields.append(f"{key} = ${i+1}")
+            values.append(value)
+        sql = f"UPDATE events SET {', '.join(fields)} WHERE id = ${len(values)+1}"
+        values.append(event_id)
+        await self.conn.execute(sql, *values)

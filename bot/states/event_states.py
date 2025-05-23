@@ -26,3 +26,13 @@ class EventView(StatesGroup):
     viewing_events = State()
     back_to_my_events = State()
 
+
+
+class EventEdit(StatesGroup):
+    choosing_field = State()
+    editing_title = State()
+    editing_description = State()
+    editing_start_date = State()
+    editing_end_date = State()
+    editing_organizer = State()
+    editing_price = State()
