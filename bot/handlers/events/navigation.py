@@ -43,6 +43,7 @@ async def back_to_main_from_events(message: Message, state: FSMContext):
 
 @router.message(lambda m: m.text == "⬅️ Назад")
 async def back_to_my_events_menu(message: Message, state: FSMContext):
+    await state.clear()  # очищаем все данные FSM
     await state.set_state(EventView.choosing_category)
     await message.answer("Мои события:", reply_markup=my_events_keyboard)
 

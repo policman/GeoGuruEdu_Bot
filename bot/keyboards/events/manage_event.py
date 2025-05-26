@@ -14,7 +14,8 @@ def manage_event_keyboard(event, user_id, source, page):
 
 def manage_event_reply_keyboard():
     buttons = [
-        [KeyboardButton(text="🗑 Удалить"), KeyboardButton(text="📨 Разослать приглашения")],
+        [KeyboardButton(text="📨 Разослать приглашения"), KeyboardButton(text="👥 Участники")],
+        [KeyboardButton(text="🗑 Удалить")],
         [KeyboardButton(text="⬅️ Назад")]
     ]
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
