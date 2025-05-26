@@ -44,3 +44,9 @@ class VisitEvent(StatesGroup):
     search = State()
     my_events = State()
     invitations = State()
+    viewing_one_event = State()
+
+# from aiogram.fsm.state import StatesGroup, State
+
+# class EventManageFSM(StatesGroup):
+#     viewing_event = State()  # состояние просмотра одного события
