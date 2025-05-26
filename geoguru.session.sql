@@ -1,1 +1,1 @@
-SELECT * FROM events;
+SELECT * FROM event_participants;

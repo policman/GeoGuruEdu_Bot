@@ -36,3 +36,11 @@ class EventEdit(StatesGroup):
     editing_end_date = State()
     editing_organizer = State()
     editing_price = State()
+
+
+class VisitEvent(StatesGroup):
+    menu = State()
+    show_list = State()
+    search = State()
+    my_events = State()
+    invitations = State()

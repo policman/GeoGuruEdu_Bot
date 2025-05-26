@@ -1,9 +1,9 @@
 from aiogram import Router
 from aiogram.types import Message
 from aiogram.filters import Command
-from bot.keyboards.menu import section_menu_keyboard
-from bot.keyboards.menu import main_menu_keyboard
+from bot.keyboards.menu import main_menu_keyboard, section_menu_keyboard
 from bot.database.user_repo import get_user_by_telegram_id, insert_user
+from bot.database.invitations_repo import get_unread_invitations_count
 from bot.config import DATABASE_URL
 import asyncpg
 from datetime import datetime
@@ -46,6 +46,7 @@ async def start_handler(message: Message) -> None:
     else:
         user_data = existing
 
+    invite_count = await get_unread_invitations_count(user.id, conn)
     await conn.close()
 
     full_name = user_data['first_name']

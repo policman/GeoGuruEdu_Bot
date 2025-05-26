@@ -1,5 +1,8 @@
+# bot/services/event_service.py
+
 import asyncpg
 from datetime import date
+import datetime
 
 class EventService:
     def __init__(self, conn: asyncpg.Connection):
@@ -52,7 +55,26 @@ class EventService:
         await self.conn.execute("DELETE FROM events WHERE id = $1", event_id)
 
     async def delete_event_by_id(self, event_id: int):
+        await self.conn.execute("DELETE FROM event_participants WHERE event_id = $1", event_id)
         await self.conn.execute("DELETE FROM events WHERE id = $1", event_id)
+
+    async def invite_all_users(self, event_id, inviter_user_id, conn):
+        # Получить список ВСЕХ пользователей, кроме приглашающего
+        user_rows = await conn.fetch("SELECT id FROM users WHERE id != $1", inviter_user_id)
+        invited_user_ids = [row['id'] for row in user_rows]
+
+        now = datetime.datetime.now()
+
+        # Вставить приглашения (если нет дублей)
+        for invited_id in invited_user_ids:
+            await conn.execute(
+                """
+                INSERT INTO invitations (event_id, invited_user_id, inviter_user_id, is_read, is_accepted, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT DO NOTHING
+                """,
+                event_id, invited_id, inviter_user_id, False, None, now
+            )
 
     # Универсальное обновление (только передаваемые поля)
     async def update_event_fields(self, event_id, **kwargs):

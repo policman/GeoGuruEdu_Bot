@@ -11,10 +11,21 @@ from .create import (
 from .view import (
     show_event_list, handle_active_events, handle_created_events, handle_archive_events, handle_show_event
 )
-from .navigation import router as navigation_router
 from bot.states.event_states import EventCreation, EventView
+from .view import router as view_router
+from .manage import router as manage_router
+from .navigation import router as navigation_router
+from .visit_event import router as visit_event_router
+from .invite_event import router as invite_event_router
 
 router = Router()
+
+router.include_router(invite_event_router)
+router.include_router(view_router)
+router.include_router(manage_router)
+router.include_router(navigation_router)
+router.include_router(visit_event_router)
+
 
 @router.message(lambda m: m.text == "📅 События")
 async def handle_events_entry(message: Message):
@@ -97,4 +108,3 @@ async def choosing_archive(message: Message, state: FSMContext):
 async def show_event_callback(callback: CallbackQuery, state: FSMContext):
     await handle_show_event(callback, state)
 
-router.include_router(navigation_router)
