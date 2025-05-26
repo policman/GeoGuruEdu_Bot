@@ -14,5 +14,5 @@ invitations = Table(
     Column("is_read", Boolean, default=False),
     Column("is_accepted", Boolean, default=None, nullable=True),
     Column("created_at", DateTime),
-    UniqueConstraint("event_id", "invited_user_id", name="uniq_event_invited")
+    #UniqueConstraint("event_id", "invited_user_id", name="uniq_event_invited")
 )

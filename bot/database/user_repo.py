@@ -11,3 +11,9 @@ async def insert_user(conn: asyncpg.Connection, user_data: dict):
     """, user_data['last_name'], user_data['first_name'], user_data['middle_name'],
          user_data['username'], user_data['telegram_id'],
          user_data['position'], user_data['experience'], user_data['department'])
+    
+async def update_user_field(conn, telegram_id, field, value):
+    await conn.execute(
+        f"UPDATE users SET {field} = $1 WHERE telegram_id = $2",
+        value, telegram_id
+    )

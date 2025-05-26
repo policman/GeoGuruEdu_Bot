@@ -47,7 +47,29 @@ def edit_event_fields_keyboard(event_id, source, page):
 async def handle_delete_event(callback: CallbackQuery, state: FSMContext):
     if not callback.data:
         return
+
     _, event_id, source, page = callback.data.split(":")
+
+    telegram_id = callback.from_user.id
+    conn = await asyncpg.connect(DATABASE_URL)
+    user_row = await conn.fetchrow("SELECT id FROM users WHERE telegram_id = $1", telegram_id)
+    if not user_row:
+        await conn.close()
+        await callback.answer("Пользователь не найден.", show_alert=True)
+        return
+    user_db_id = user_row['id']
+
+    event = await conn.fetchrow("SELECT author_id FROM events WHERE id = $1", int(event_id))
+    await conn.close()
+    if not event:
+        await callback.answer("Событие не найдено.", show_alert=True)
+        return
+    author_id = event['author_id']
+
+    if author_id != user_db_id:
+        await callback.answer("Удалять может только создатель события.", show_alert=True)
+        return
+
     if callback.message and isinstance(callback.message, Message):
         await callback.message.edit_text(
             "Вы уверены, что хотите удалить это событие?",
@@ -68,6 +90,7 @@ async def handle_delete_event(callback: CallbackQuery, state: FSMContext):
         )
     else:
         await callback.answer("Не удалось отредактировать сообщение.")
+
 
 @router.callback_query(F.data.startswith("confirm_delete_event:"))
 async def handle_confirm_delete_event(callback: CallbackQuery, state: FSMContext):
@@ -104,17 +127,17 @@ async def handle_edit_event(callback: CallbackQuery, state: FSMContext):
     user_db_id = user_row['id']
 
     # Получаем creator_id из events
-    event = await conn.fetchrow("SELECT creator_id FROM events WHERE id = $1", int(event_id))
+    event = await conn.fetchrow("SELECT author_id FROM events WHERE id = $1", int(event_id))
     await conn.close()
     if not event:
         await callback.answer("Событие не найдено.", show_alert=True)
         return
-    creator_id = event['creator_id']
+    author_id = event['author_id']
 
-    if creator_id != user_db_id:
+    if author_id != user_db_id:
         await callback.answer("Редактировать может только создатель события.", show_alert=True)
         return
-    # ======= /ПРОВЕРКА =======
+    # ======= ПРОВЕРКА =======
 
     await state.update_data(event_id=event_id, source=source, page=page, fields={})
     await state.set_state(EventEdit.choosing_field)

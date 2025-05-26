@@ -172,4 +172,4 @@ async def confirm_event(message: Message, state: FSMContext):
 async def cancel_creation(message: Message, state: FSMContext):
     await state.clear()
     await message.answer("Создание события отменено.", reply_markup=event_menu_keyboard)
-    await message.answer("🔙 Возврат в главное меню", reply_markup=main_menu_keyboard)
+    # await message.answer("🔙 Возврат в главное меню", reply_markup=main_menu_keyboard)

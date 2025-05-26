@@ -72,6 +72,7 @@ def add_unique_invitation_index(engine):
         )
         print("✅ Индекс на invitations создан.")
 
+
 # === Основная миграция ===
 def create_sqlalchemy_tables():
     metadata.create_all(engine)
@@ -92,8 +93,8 @@ async def main():
         await conn.close()
         log("🗂 Миграция 'initial_migration' записана в журнал.")
     except Exception as e:
-        log(f"❌ Ошибка при создании таблиц: {e}")
-        log("🛠 Пробуем создать таблицу users вручную через asyncpg...")
+        #log(f"❌ Ошибка при создании таблиц: {e}")
+        #log("🛠 Пробуем создать таблицу users вручную через asyncpg...")
         await create_users_table_fallback()
         create_sqlalchemy_tables()
 

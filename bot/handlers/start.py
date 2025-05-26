@@ -55,4 +55,4 @@ async def start_handler(message: Message) -> None:
 
     greeting = get_greeting()
     await message.answer(f"{greeting}, {full_name}!", reply_markup=section_menu_keyboard)
-    await message.answer("🔸 Ваша активность за сегодня:\n[Заглушка для статистики]")
+    #await message.answer("🔸 Ваша активность за сегодня:\n[Заглушка для статистики]")
