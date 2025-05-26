@@ -30,8 +30,11 @@ migrations_table = Table(
     Column("applied_at", String, nullable=False)
 )
 
+
 migrations_table.tometadata(metadata)
 engine = create_engine(DATABASE_URL)
+from bot.database.migrations.invitations import invitations
+invitations.tometadata(metadata)
 
 
 MIGRATION_LOG_FILE = "migration.log"
@@ -62,6 +65,13 @@ async def create_users_table_fallback():
     await conn.close()
     log("✅ Таблица users создана вручную (fallback).")
 
+def add_unique_invitation_index(engine):
+    with engine.connect() as conn:
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uniq_event_invited ON invitations (event_id, invited_user_id);"
+        )
+        print("✅ Индекс на invitations создан.")
+
 # === Основная миграция ===
 def create_sqlalchemy_tables():
     metadata.create_all(engine)
@@ -71,6 +81,7 @@ def create_sqlalchemy_tables():
 async def main():
     try:
         create_sqlalchemy_tables()
+        add_unique_invitation_index(engine)
         # Логируем факт миграции
         conn = await asyncpg.connect(DATABASE_URL)
         await conn.execute("""
