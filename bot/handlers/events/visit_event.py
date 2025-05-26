@@ -6,6 +6,8 @@ from bot.keyboards.events.my_events import my_events_keyboard
 import asyncpg
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from bot.config import DATABASE_URL
+from typing import cast
+from aiogram.types import Message
 
 router = Router()
 
@@ -21,8 +23,54 @@ async def handle_visit_event_menu(message: Message, state: FSMContext):
 # Список всех доступных событий других пользователей
 @router.message(lambda m: m.text == "Список событий")
 async def handle_list_all_events(message: Message, state: FSMContext):
-    # TODO: Здесь вывести события других пользователей (реализуй фильтрацию сам)
-    await message.answer("Тут будет список всех доступных событий (кроме своих).")
+    if not message.from_user:
+        await message.answer("Не удалось определить пользователя.")
+        return
+
+    telegram_id = message.from_user.id
+    conn = await asyncpg.connect(DATABASE_URL)
+    user_row = await conn.fetchrow("SELECT id FROM users WHERE telegram_id = $1", telegram_id)
+    if not user_row:
+        await conn.close()
+        await message.answer("Пользователь не найден.")
+        return
+    user_id = user_row["id"]
+
+    events = await conn.fetch(
+        """
+        SELECT id, title, start_date, end_date, organizers
+        FROM events
+        WHERE author_id != $1
+          AND is_draft = FALSE
+          AND end_date >= CURRENT_DATE
+        ORDER BY start_date
+        """,
+        user_id
+    )
+    await conn.close()
+
+    if not events:
+        await message.answer("Нет доступных событий.")
+        return
+
+    for ev in events:
+        text = (
+            f"<b>{ev['title']}</b>\n"
+            f"📅 {ev['start_date']} – {ev['end_date']}\n"
+            f"👤 Организатор: {ev['organizers']}"
+        )
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="📨 Подать заявку",
+                        callback_data=f"apply_event:{ev['id']}"
+                    )
+                ]
+            ]
+        )
+        await message.answer(text, reply_markup=kb, parse_mode="HTML")
+
 
 # Поиск по событиям
 @router.message(lambda m: m.text == "Поиск")
@@ -148,4 +196,52 @@ async def handle_decline_invite(callback: CallbackQuery):
         await callback.message.edit_text("❌ Приглашение отклонено.")  # type: ignore[attr-defined]
     except AttributeError:
         pass
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("apply_event:"))
+async def handle_apply_for_event(callback: CallbackQuery):
+    data = callback.data
+    if not data:
+        await callback.answer("Ошибка: нет данных.", show_alert=True)
+        return
+
+    parts = data.split(":")
+    if len(parts) < 2:
+        await callback.answer("Ошибка в формате данных.", show_alert=True)
+        return
+
+    event_id = int(parts[1])
+    user = callback.from_user
+    if not user:
+        await callback.answer("Не удалось определить пользователя.", show_alert=True)
+        return
+
+    telegram_id = user.id
+    conn = await asyncpg.connect(DATABASE_URL)
+    user_row = await conn.fetchrow("SELECT id FROM users WHERE telegram_id = $1", telegram_id)
+    if not user_row:
+        await conn.close()
+        await callback.answer("Пользователь не найден.", show_alert=True)
+        return
+    user_id = user_row["id"]
+
+    await conn.execute(
+        """
+        INSERT INTO invitations (event_id, invited_user_id, inviter_user_id, is_read, is_accepted, created_at)
+        VALUES ($1, $2, $3, FALSE, NULL, NOW())
+        ON CONFLICT DO NOTHING
+        """,
+        event_id, user_id, user_id
+    )
+    await conn.close()
+
+    if callback.message:
+        msg = cast(Message, callback.message)
+        try:
+            await msg.edit_reply_markup(reply_markup=None)
+            await msg.answer("✅ Заявка подана.")
+        except Exception:
+            pass
+    else:
+        await callback.answer("✅ Заявка подана.")
 
