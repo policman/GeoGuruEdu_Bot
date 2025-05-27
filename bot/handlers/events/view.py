@@ -136,9 +136,6 @@ async def handle_show_event(callback: CallbackQuery, state: FSMContext):
     caption = (
         f"<b>{event['title']}</b>\n\n"
         f"<i>{event['description']}</i>"
-        # f"📅 {format_event_dates(event['start_date'], event['end_date'])}\n"
-        # f"👤 Организатор: {event['organizers']}\n"
-        # f"💰 Стоимость: {price}"
     )
 
     try:
@@ -152,7 +149,7 @@ async def handle_show_event(callback: CallbackQuery, state: FSMContext):
         media.extend([InputMediaPhoto(media=photo) for photo in photos[1:]])
         await msg.answer_media_group(
             cast(
-                list[MediaType],  # aiogram ожидает list[MediaType]
+                list[MediaType],  
                 media
             )
         )
@@ -168,11 +165,7 @@ async def handle_show_event(callback: CallbackQuery, state: FSMContext):
 
     
     await msg.answer(
-        # f"📅 {format_event_dates(event['start_date'], event['end_date'])}\n"
-        # f"👤 Организатор: {event['organizers']}\n"
-        # f"💰 Стоимость: {price}",  # невидимый символ, не выводится пользователю
         f"{format_event_dates(event['start_date'], event['end_date'])} • {price} • {event['organizers']}\n",
-        
         reply_markup=manage_event_reply_keyboard()
     )
     await msg.answer(

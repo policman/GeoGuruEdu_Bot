@@ -2,7 +2,7 @@ from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from datetime import datetime
 from aiogram.types import InputMediaPhoto
-
+from .format_event_dates import format_event_dates
 from bot.states.event_states import EventCreation
 from bot.keyboards.events import confirm_photos_keyboard, confirm_skip_video_keyboard
 from bot.keyboards.events import confirmation_keyboard, event_menu_keyboard
@@ -111,9 +111,9 @@ async def set_videos(message: Message, state: FSMContext):
     media = []
     if data.get("photos"):
         media.append(InputMediaPhoto(media=data['photos'][0], caption=(
-            f"📌 <b>{data['title']}</b>\n"
-            f"📝 {data['description']}\n"
-            f"📅 {data['start_date']} — {data['end_date']}\n"
+            f"<b>{data['title']}</b>\n"
+            f"{data['description']}\n\n"
+            f"📅 {format_event_dates(data['start_date'], data['end_date'])}\n\n"
             f"👤 Организатор: {data['organizers']}\n"
             f"💰 Стоимость: {price_display}"
         ), parse_mode="HTML"))
@@ -172,4 +172,3 @@ async def confirm_event(message: Message, state: FSMContext):
 async def cancel_creation(message: Message, state: FSMContext):
     await state.clear()
     await message.answer("Создание события отменено.", reply_markup=event_menu_keyboard)
-    # await message.answer("🔙 Возврат в главное меню", reply_markup=main_menu_keyboard)

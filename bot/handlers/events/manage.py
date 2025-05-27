@@ -207,15 +207,28 @@ async def handle_choose_field(callback: CallbackQuery, state: FSMContext):
 async def save_photos(message: Message, state: FSMContext):
     data = await state.get_data()
     fields = data.get("fields", {})
+    current_photos = fields.get("photos", [])
+
     if message.photo:
-        # Можно добавить сразу несколько file_id
-        photo_ids = [p.file_id for p in message.photo]
-        fields["photos"] = photo_ids
-        await state.update_data(fields=fields)
-        await state.set_state(EventEdit.choosing_field)
-        await message.answer("Фото обновлено. Что ещё изменить?", reply_markup=edit_event_fields_keyboard(data["event_id"], data["source"], data["page"]))
+        largest_photo_id = message.photo[-1].file_id
+
+        if largest_photo_id not in current_photos:
+            if len(current_photos) < 5:
+                current_photos.append(largest_photo_id)
+                fields["photos"] = current_photos
+                await state.update_data(fields=fields)
+                await state.set_state(EventEdit.choosing_field)
+                await message.answer(
+                    f"Фото добавлено ({len(current_photos)}/5). Что ещё изменить?",
+                    reply_markup=edit_event_fields_keyboard(data["event_id"], data["source"], data["page"])
+                )
+            else:
+                await message.answer("Можно загрузить не более 5 фото.")
+        else:
+            await message.answer("Это фото уже добавлено.")
     else:
         await message.answer("Пришлите фото!")
+
 
 @router.message(EventEdit.editing_videos)
 async def save_videos(message: Message, state: FSMContext):
