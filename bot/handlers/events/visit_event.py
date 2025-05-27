@@ -8,6 +8,9 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, C
 from bot.config import DATABASE_URL
 from typing import cast
 from aiogram.types import Message
+from bot.states.event_states import VisitEvent
+from aiogram.filters import StateFilter
+
 
 router = Router()
 
@@ -72,10 +75,13 @@ async def handle_list_all_events(message: Message, state: FSMContext):
         await message.answer(text, reply_markup=kb, parse_mode="HTML")
 
 
-# Поиск по событиям
+
+
 @router.message(lambda m: m.text == "Поиск")
 async def handle_search_events(message: Message, state: FSMContext):
-    await message.answer("Отправьте текст для поиска по событиям:")
+    await state.set_state(VisitEvent.search_query)
+    await message.answer("🔎 Введите текст для поиска по событиям (в названии или описании):")
+
 
 # --- Хендлер: Список приглашений ---
 @router.message(lambda m: m.text == "Приглашения")
@@ -245,3 +251,64 @@ async def handle_apply_for_event(callback: CallbackQuery):
     else:
         await callback.answer("✅ Заявка подана.")
 
+@router.message(StateFilter(VisitEvent.search_query))
+async def process_search_query(message: Message, state: FSMContext):
+    if not message.text:
+        await message.answer("⚠️ Пожалуйста, введите текст для поиска.")
+        return
+    search_text = message.text.strip().lower()
+
+    if not message.from_user:
+        await message.answer("Не удалось определить пользователя.")
+        return
+
+    telegram_id = message.from_user.id
+    conn = await asyncpg.connect(DATABASE_URL)
+    user_row = await conn.fetchrow("SELECT id FROM users WHERE telegram_id = $1", telegram_id)
+    if not user_row:
+        await conn.close()
+        await message.answer("Пользователь не найден.")
+        return
+    user_id = user_row["id"]
+
+    results = await conn.fetch(
+        """
+        SELECT id, title, start_date, end_date, organizers
+        FROM events
+        WHERE author_id != $1
+        AND is_draft = FALSE
+        AND end_date >= CURRENT_DATE
+        AND (
+            title ILIKE '%' || $2 || '%' OR
+            description ILIKE '%' || $2 || '%'
+        )
+        ORDER BY start_date
+        """,
+        user_id, search_text
+    )
+
+
+    await conn.close()
+    await state.clear()
+
+    if not results:
+        await message.answer("❌ События не найдены.")
+        return
+
+    for ev in results:
+        text = (
+            f"<b>{ev['title']}</b>\n"
+            f"📅 {ev['start_date']} – {ev['end_date']}\n"
+            f"👤 Организатор: {ev['organizers']}"
+        )
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="📨 Подать заявку",
+                        callback_data=f"apply_event:{ev['id']}"
+                    )
+                ]
+            ]
+        )
+        await message.answer(text, reply_markup=kb, parse_mode="HTML")
