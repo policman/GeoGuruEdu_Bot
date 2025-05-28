@@ -31,11 +31,11 @@ router.include_router(visit_event_router)
 async def handle_events_entry(message: Message):
     await events_entry(message)
 
-@router.message(lambda m: m.text == "Мои события")
-async def handle_my_events_menu(message: Message, state: FSMContext):
-    await state.set_state(EventView.choosing_category)
-    from .navigation import show_my_events_menu
-    await show_my_events_menu(message, state)
+# @router.message(lambda m: m.text == "Мои события")
+# async def handle_my_events_menu(message: Message, state: FSMContext):
+#     await state.set_state(EventView.choosing_category)
+#     from .navigation import show_my_events_menu
+#     await show_my_events_menu(message, state)
 
 @router.message(lambda m: m.text == "⬅️ В меню")
 async def handle_back_to_main_from_events(message: Message, state: FSMContext):

@@ -39,11 +39,10 @@ async def main():
     from bot.handlers.learning import learning_router
     # from bot.handlers.testu.progress import progress_router
 
-
+    dp.include_router(events_router)  # events_router = registration.router
     dp.include_router(start.router)
     #dp.include_router(menu_router)
     dp.include_router(profile.router)
-    dp.include_router(events_router)
     dp.include_router(ai_chat_router)
     dp.include_router(learning_router)
     # dp.include_router(progress_router)
