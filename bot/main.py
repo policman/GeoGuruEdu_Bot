@@ -12,8 +12,8 @@ from run_migrations import main as run_migrations_main
 async def set_default_commands(bot: Bot):
     await bot.set_my_commands([
         BotCommand(command="start", description="Перезапустить бота"),
-        BotCommand(command="help", description="Справка"),
-        BotCommand(command="menu", description="Показать главное меню"),
+        #BotCommand(command="help", description="Справка"),
+        #BotCommand(command="menu", description="Показать главное меню"),
     ])
 
 async def main():

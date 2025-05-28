@@ -17,3 +17,8 @@ SELECT
     FALSE AS is_draft
 FROM (SELECT 1 AS id UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4) AS u
 CROSS JOIN generate_series(1, 5) AS s(num);
+
+
+
+ALTER TABLE invitations
+ADD COLUMN approved_by_author BOOLEAN;

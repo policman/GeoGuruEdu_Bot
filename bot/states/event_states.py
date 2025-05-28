@@ -46,6 +46,14 @@ class VisitEvent(StatesGroup):
     invitations = State()
     viewing_one_event = State()
     search_query = State()
+    listing = State()
+    search_query = State()
+    filtering = State()
+    filter_organizer = State()
+    filter_price_range = State()
+    filter_date_range = State()
+    filter_start_date = State()  # ← Добавь это
+    filter_end_date = State()    # ← И это
 # from aiogram.fsm.state import StatesGroup, State
 
 # class EventManageFSM(StatesGroup):
