@@ -4,9 +4,12 @@ import asyncpg
 from datetime import datetime
 from aiogram.utils.media_group import MediaGroupBuilder
 from bot.config import DATABASE_URL
-from .format_event_dates import format_event_dates  # убедись, что этот хелпер есть и правильно импортирован
+from .format_event_dates import format_event_dates  
 
-async def show_event_list(msg: Message, state: FSMContext):
+from typing import Optional  
+
+async def show_event_list(msg: Message, state: FSMContext, user_id_override: Optional[int] = None):
+
     if not isinstance(msg, Message) or not msg.from_user:
         return
 
@@ -15,12 +18,20 @@ async def show_event_list(msg: Message, state: FSMContext):
         return
 
     conn = await asyncpg.connect(DATABASE_URL)
-    user_row = await conn.fetchrow("SELECT id FROM users WHERE telegram_id = $1", msg.from_user.id)
+    telegram_id = user_id_override or (msg.from_user and msg.from_user.id)
+    if not telegram_id:
+        await conn.close()
+        await msg.answer("Пользователь не найден.")
+        return
+
+    user_row = await conn.fetchrow("SELECT id FROM users WHERE telegram_id = $1", telegram_id)
     if not user_row:
         await conn.close()
         await msg.answer("Пользователь не найден.")
         return
+
     user_id = user_row["id"]
+
 
     data = await state.get_data()
     page = data.get("page", 0)
@@ -142,8 +153,9 @@ async def show_event_list(msg: Message, state: FSMContext):
     nav_row = list(filter(None, [
         InlineKeyboardButton(text="⬅️", callback_data="page:prev") if page > 0 else None,
         InlineKeyboardButton(text=f"{page + 1}/{total_pages}", callback_data="noop"),
-        InlineKeyboardButton(text="➡️", callback_data="page:next") if (page + 1) * 4 < total_events else None
+        InlineKeyboardButton(text="➡️", callback_data="page:next") if (page + 1) * 4 < total_events else None,
     ]))
+
 
     if nav_row:
         await msg.answer(text="Навигация по страницам:", reply_markup=InlineKeyboardMarkup(inline_keyboard=[nav_row]))

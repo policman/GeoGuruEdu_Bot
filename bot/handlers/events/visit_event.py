@@ -51,7 +51,8 @@ async def change_page(callback: CallbackQuery, state: FSMContext):
     await state.update_data(page=new_page)
     await callback.answer()
     if isinstance(callback.message, Message):
-        await show_event_list(callback.message, state)
+        await show_event_list(callback.message, state, user_id_override=callback.from_user.id)
+
 
 @router.callback_query(F.data == "filter:organizer")
 async def handle_filter_organizer(callback: CallbackQuery, state: FSMContext):
@@ -87,7 +88,8 @@ async def handle_reset_filters(callback: CallbackQuery, state: FSMContext):
     )
     await callback.answer("Фильтры сброшены")
     if callback.message and isinstance(callback.message, Message):
-        await show_event_list(callback.message, state)
+        await show_event_list(callback.message, state, user_id_override=callback.from_user.id)
+
 
 @router.message(StateFilter(VisitEvent.filter_organizer))
 async def apply_organizer_filter(message: Message, state: FSMContext):
