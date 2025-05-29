@@ -4,34 +4,42 @@ import asyncpg
 from datetime import datetime
 from aiogram.utils.media_group import MediaGroupBuilder
 from bot.config import DATABASE_URL
-from .format_event_dates import format_event_dates  
+from .format_event_dates import format_event_dates
+from .get_or_create_user_id import get_or_create_user_id
 
-from typing import Optional  
+from aiogram import Bot
+from typing import cast, Any
 
-async def show_event_list(msg: Message, state: FSMContext, user_id_override: Optional[int] = None):
+deleted_messages: dict[int, list[int]] = {}
 
-    if not isinstance(msg, Message) or not msg.from_user:
+async def show_event_list(msg: Message, state: FSMContext):
+    if not isinstance(msg, Message):
         return
 
-    bot = msg.bot
-    if bot is None:
+    bot = cast(Bot, msg.bot)
+    user_id_tg = msg.from_user.id if msg.from_user else None
+    if user_id_tg is None:
+        await msg.answer("Пользователь не найден.")
         return
 
     conn = await asyncpg.connect(DATABASE_URL)
-    telegram_id = user_id_override or (msg.from_user and msg.from_user.id)
-    if not telegram_id:
-        await conn.close()
+    user_id = await get_or_create_user_id(msg)
+    if user_id is None:
         await msg.answer("Пользователь не найден.")
         return
 
-    user_row = await conn.fetchrow("SELECT id FROM users WHERE telegram_id = $1", telegram_id)
-    if not user_row:
-        await conn.close()
-        await msg.answer("Пользователь не найден.")
-        return
 
-    user_id = user_row["id"]
 
+    # Удаляем старые сообщения событий и навигации
+    if user_id_tg in deleted_messages:
+        for message_id in deleted_messages[user_id_tg]:
+            try:
+                await bot.delete_message(chat_id=msg.chat.id, message_id=message_id)
+            except:
+                pass
+        deleted_messages[user_id_tg] = []
+    else:
+        deleted_messages[user_id_tg] = []
 
     data = await state.get_data()
     page = data.get("page", 0)
@@ -50,30 +58,32 @@ async def show_event_list(msg: Message, state: FSMContext, user_id_override: Opt
         if end_date_str:
             end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
     except ValueError:
-        await msg.answer("Ошибка формата даты. Используйте формат: YYYY-MM-DD:YYYY-MM-DD")
         await conn.close()
+        await msg.answer("Ошибка формата даты. Используйте формат: YYYY-MM-DD")
         return
 
     filters = ["author_id != $1", "is_draft = FALSE", "end_date >= CURRENT_DATE"]
-    params = [user_id]
+    # params = [user_id]
+
+    params: list[Any] = [user_id]
 
     if organizer:
-        filters.append(f"organizers ILIKE '%' || ${len(params) + 1} || '%'")
+        filters.append(f"organizers ILIKE '%' || ${len(params)+1} || '%'")
         params.append(organizer)
     if min_price is not None:
-        filters.append(f"price >= ${len(params) + 1}")
+        filters.append(f"price >= ${len(params)+1}")
         params.append(min_price)
     if max_price is not None:
-        filters.append(f"price <= ${len(params) + 1}")
+        filters.append(f"price <= ${len(params)+1}")
         params.append(max_price)
     if start_date:
-        filters.append(f"start_date >= ${len(params) + 1}")
-        params.append(start_date)
+        filters.append(f"start_date >= ${len(params)+1}")
+        params.append(start_date.isoformat())
     if end_date:
-        filters.append(f"end_date <= ${len(params) + 1}")
-        params.append(end_date)
+        filters.append(f"end_date <= ${len(params)+1}")
+        params.append(end_date.isoformat())
     if search_query:
-        filters.append(f"(title ILIKE '%' || ${len(params) + 1} || '%' OR description ILIKE '%' || ${len(params) + 1} || '%')")
+        filters.append(f"(title ILIKE '%' || ${len(params)+1} || '%' OR description ILIKE '%' || ${len(params)+1} || '%')")
         params.append(search_query)
 
     where_clause = " AND ".join(filters)
@@ -83,7 +93,7 @@ async def show_event_list(msg: Message, state: FSMContext, user_id_override: Opt
         FROM events
         WHERE {where_clause}
         ORDER BY start_date
-        OFFSET ${len(params) + 1} LIMIT 4
+        OFFSET ${len(params)+1} LIMIT 4
     """
 
     params_with_offset = params + [offset]
@@ -99,21 +109,9 @@ async def show_event_list(msg: Message, state: FSMContext, user_id_override: Opt
 
     await conn.close()
 
-    active_filters = []
-    if organizer:
-        active_filters.append(f"Организатор: {organizer}")
-    if min_price or max_price:
-        active_filters.append(f"Цена: {min_price or 'от'} – {max_price or 'до'}")
-    if start_date_str or end_date_str:
-        active_filters.append(f"Дата: {start_date_str or 'от'} – {end_date_str or 'до'}")
-    if search_query:
-        active_filters.append(f"Поиск: {search_query}")
-
-    if active_filters:
-        await msg.answer("🔎 Актуальные фильтры:\n" + "\n".join(f"• {f}" for f in active_filters))
-
     if not events:
-        await msg.answer("Нет событий по заданным фильтрам.")
+        msg_sent = await msg.answer("Нет событий по заданным фильтрам.")
+        deleted_messages[user_id_tg].append(msg_sent.message_id)
         return
 
     for ev in events:
@@ -130,37 +128,39 @@ async def show_event_list(msg: Message, state: FSMContext, user_id_override: Opt
             media_group.add_video(media=videos[0], caption=full_caption, parse_mode="HTML")
             for video in videos[1:]:
                 media_group.add_video(media=video)
-        if photos and videos:
-            for video in videos:
-                media_group.add_video(media=video)
 
         if media_group.build():
-            await bot.send_media_group(chat_id=msg.chat.id, media=media_group.build())
+            result = await bot.send_media_group(chat_id=msg.chat.id, media=media_group.build())
+            for m in result:
+                deleted_messages[user_id_tg].append(m.message_id)
 
         details_text = f"{format_event_dates(ev['start_date'], ev['end_date'])} • {'бесплатно' if ev['price'] == 0 else str(ev['price']) + '₽'} • {ev['organizers']}"
         if ev['id'] in participant_ids:
             details_text += "\n\n✅ Вы участвуете"
-            await bot.send_message(chat_id=msg.chat.id, text=details_text)
+            msg_sent = await bot.send_message(chat_id=msg.chat.id, text=details_text)
         elif ev['id'] in applied_ids:
             details_text += "\n\n⌛ Заявка уже подана"
-            await bot.send_message(chat_id=msg.chat.id, text=details_text)
+            msg_sent = await bot.send_message(chat_id=msg.chat.id, text=details_text)
         else:
             kb = InlineKeyboardMarkup(
                 inline_keyboard=[[InlineKeyboardButton(text="📨 Подать заявку", callback_data=f"apply_event:{ev['id']}")]]
             )
-            await bot.send_message(chat_id=msg.chat.id, text=details_text, reply_markup=kb)
+            msg_sent = await bot.send_message(chat_id=msg.chat.id, text=details_text, reply_markup=kb)
 
-    nav_row = list(filter(None, [
-        InlineKeyboardButton(text="⬅️", callback_data="page:prev") if page > 0 else None,
-        InlineKeyboardButton(text=f"{page + 1}/{total_pages}", callback_data="noop"),
-        InlineKeyboardButton(text="➡️", callback_data="page:next") if (page + 1) * 4 < total_events else None,
-    ]))
+        deleted_messages[user_id_tg].append(msg_sent.message_id)
+
+    if total_pages > 1:
+        nav_row = list(filter(None, [
+            InlineKeyboardButton(text="⬅️", callback_data="page:prev") if page > 0 else None,
+            InlineKeyboardButton(text=f"{page + 1}/{total_pages}", callback_data="noop"),
+            InlineKeyboardButton(text="➡️", callback_data="page:next") if (page + 1) * 4 < total_events else None,
+        ]))
+
+        msg_sent = await msg.answer(text="Навигация по страницам:", reply_markup=InlineKeyboardMarkup(inline_keyboard=[nav_row]))
+        deleted_messages[user_id_tg].append(msg_sent.message_id)
 
 
-    if nav_row:
-        await msg.answer(text="Навигация по страницам:", reply_markup=InlineKeyboardMarkup(inline_keyboard=[nav_row]))
-
-
+    # Блок фильтров остаётся
     filter_kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [

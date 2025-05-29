@@ -1,5 +1,5 @@
 from aiogram import Router, F
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import StateFilter
 from datetime import datetime
@@ -39,41 +39,27 @@ async def handle_text_search(message: Message, state: FSMContext):
     await state.set_state(VisitEvent.listing)
     await show_event_list(message, state)
 
-@router.callback_query(lambda c: c.data and c.data.startswith("page:") and c.message)
-async def change_page(callback: CallbackQuery, state: FSMContext):
-    parts = (callback.data or "").split(":")
-    if len(parts) != 2:
-        return
-    direction = parts[1]
-    data = await state.get_data()
-    page = data.get("page", 0)
-    new_page = page + 1 if direction == "next" else max(page - 1, 0)
-    await state.update_data(page=new_page)
-    await callback.answer()
-    if isinstance(callback.message, Message):
-        await show_event_list(callback.message, state, user_id_override=callback.from_user.id)
-
 
 @router.callback_query(F.data == "filter:organizer")
 async def handle_filter_organizer(callback: CallbackQuery, state: FSMContext):
     await state.set_state(VisitEvent.filter_organizer)
+    await callback.answer()
     if isinstance(callback.message, Message):
         await callback.message.answer("Введите имя организатора для фильтрации:")
-    await callback.answer()
 
 @router.callback_query(F.data == "filter:price")
 async def handle_filter_price(callback: CallbackQuery, state: FSMContext):
     await state.set_state(VisitEvent.filter_price_range)
+    await callback.answer()
     if isinstance(callback.message, Message):
         await callback.message.answer("Введите диапазон цены в формате min-max (например: 1000-3000):")
-    await callback.answer()
 
 @router.callback_query(F.data == "filter:date")
 async def handle_filter_date(callback: CallbackQuery, state: FSMContext):
     await state.set_state(VisitEvent.filter_start_date)
+    await callback.answer()
     if isinstance(callback.message, Message):
         await callback.message.answer("Введите начальную дату в формате YYYY-MM-DD:")
-    await callback.answer()
 
 @router.callback_query(F.data == "filter:reset")
 async def handle_reset_filters(callback: CallbackQuery, state: FSMContext):
@@ -87,9 +73,8 @@ async def handle_reset_filters(callback: CallbackQuery, state: FSMContext):
         page=0
     )
     await callback.answer("Фильтры сброшены")
-    if callback.message and isinstance(callback.message, Message):
-        await show_event_list(callback.message, state, user_id_override=callback.from_user.id)
-
+    if isinstance(callback.message, Message):
+        await show_event_list(callback.message, state)
 
 @router.message(StateFilter(VisitEvent.filter_organizer))
 async def apply_organizer_filter(message: Message, state: FSMContext):
@@ -145,3 +130,26 @@ async def receive_end_date(message: Message, state: FSMContext):
 
     except ValueError:
         await message.answer("❌ Неверный формат. Попробуйте ещё раз: YYYY-MM-DD")
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("page:"))
+async def paginate_events(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    current_page = data.get("page", 0)
+
+    if callback.data == "page:next":
+        page = current_page + 1
+    elif callback.data == "page:prev":
+        page = max(current_page - 1, 0)
+    else:
+        await callback.answer("❌ Неверный формат данных.")
+        return
+
+    await state.update_data(page=page)
+    await callback.answer()
+
+    # Явная проверка типа — это устраняет ошибку Pylance
+    if isinstance(callback.message, Message):
+        await show_event_list(callback.message, state)
+    else:
+        await callback.answer("Ошибка: сообщение недоступно.")
