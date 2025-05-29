@@ -3,6 +3,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import StateFilter
 from datetime import datetime
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto, InputMediaVideo
 
 from bot.keyboards.events.view_event import visit_event_keyboard
 from bot.states.event_states import VisitEvent
@@ -18,8 +19,10 @@ async def handle_visit_event_menu(message: Message, state: FSMContext):
 
 @router.message(lambda m: m.text == "Список событий")
 async def handle_list_all_events(message: Message, state: FSMContext):
+    await state.clear()
     await state.set_state(VisitEvent.listing)
-    await state.update_data(
+    
+    await state.update_data(  # ⬅️ Важно: всё заполняется
         page=0,
         filter_organizer=None,
         filter_min_price=None,
@@ -28,7 +31,11 @@ async def handle_list_all_events(message: Message, state: FSMContext):
         filter_end_date=None,
         search_query=None
     )
-    await show_event_list(message, state)
+
+    loading_msg = await message.answer("🔄 Загрузка событий...")
+    await show_event_list(loading_msg, state)
+
+
 
 @router.message(StateFilter(VisitEvent.menu))
 async def handle_text_search(message: Message, state: FSMContext):
@@ -153,3 +160,58 @@ async def paginate_events(callback: CallbackQuery, state: FSMContext):
         await show_event_list(callback.message, state)
     else:
         await callback.answer("Ошибка: сообщение недоступно.")
+    
+
+
+@router.callback_query(F.data.startswith("apply_event:"))
+async def handle_apply_event(callback: CallbackQuery, state: FSMContext):
+    data = callback.data
+    if not data or ":" not in data:
+        await callback.answer("Ошибка данных")
+        return
+
+    event_id_str = data.split(":")[1]
+    if not event_id_str.isdigit():
+        await callback.answer("Неверный ID события")
+        return
+
+    event_id = int(event_id_str)
+    user = callback.from_user
+    user_id_tg = user.id
+
+    import asyncpg
+    from bot.config import DATABASE_URL
+
+    conn = await asyncpg.connect(DATABASE_URL)
+    user_record = await conn.fetchrow("SELECT id FROM users WHERE telegram_id = $1", user_id_tg)
+
+    if not user_record:
+        await callback.answer("Вы не зарегистрированы.")
+        await conn.close()
+        return
+
+    user_id = user_record['id']
+
+    exists = await conn.fetchval("""
+        SELECT EXISTS (
+            SELECT 1 FROM event_participants WHERE user_id = $1 AND event_id = $2
+            UNION
+            SELECT 1 FROM invitations WHERE invited_user_id = $1 AND event_id = $2
+        )
+    """, user_id, event_id)
+
+    if exists:
+        await callback.answer("Вы уже участвуете или подали заявку.")
+        await conn.close()
+        return
+
+    await conn.execute("""
+        INSERT INTO invitations (event_id, invited_user_id, is_accepted)
+        VALUES ($1, $2, NULL)
+    """, event_id, user_id)
+    await conn.close()
+
+    await callback.answer("Заявка подана!")
+    msg = callback.message
+    if isinstance(msg, Message):
+        await msg.edit_reply_markup(reply_markup=None)
