@@ -169,7 +169,21 @@ async def show_event_list(msg: Message, state: FSMContext):
         msg_sent = await msg.answer(text="Навигация по страницам:", reply_markup=InlineKeyboardMarkup(inline_keyboard=[nav_row]))
         deleted_messages[user_id_tg].append(msg_sent.message_id)
 
-    # Inline-фильтры (как ты решил оставить)
+    # Формируем описание активных фильтров
+    filter_text_lines = ["<b>Фильтры:</b>"]
+    if organizer:
+        filter_text_lines.append(f"Организатор: {organizer}")
+    if min_price is not None or max_price is not None:
+        price_str = f"{min_price or 0}–{max_price or '∞'} ₽"
+        filter_text_lines.append(f"Цена: {price_str}")
+    if start_date_str or end_date_str:
+        date_range = f"{start_date_str or '...'} — {end_date_str or '...'}"
+        filter_text_lines.append(f"Даты: {date_range}")
+    if search_query:
+        filter_text_lines.append(f"Поиск: «{search_query}»")
+
+    filter_caption = "\n".join(filter_text_lines)
+
     filter_kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -180,7 +194,10 @@ async def show_event_list(msg: Message, state: FSMContext):
             [InlineKeyboardButton(text="🔄 Сбросить фильтры", callback_data="filter:reset")]
         ]
     )
-    msg_sent = await msg.answer("Фильтры:", reply_markup=filter_kb)
+
+    msg_sent = await msg.answer(filter_caption, reply_markup=filter_kb, parse_mode="HTML")
+    deleted_messages[user_id_tg].append(msg_sent.message_id)
+
     deleted_messages[user_id_tg].append(msg_sent.message_id)
 
 @router.message(F.text == "Выйти из списка")
