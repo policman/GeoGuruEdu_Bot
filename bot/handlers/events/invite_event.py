@@ -60,7 +60,7 @@ async def handle_send_invitations(message: Message, state: FSMContext):
         invited_count += 1
 
     await conn.close()
-    await message.answer(f"✅ Приглашения разосланы! ({invited_count} пользователей)")
+    await message.answer(f"✅ Приглашения разосланы!")
 
 
 @router.message(F.text == "👥 Участники")
@@ -73,6 +73,7 @@ async def show_event_participants(message: Message, state: FSMContext):
 
     conn = await asyncpg.connect(DATABASE_URL)
 
+    # Список уже подтвердившихся участников
     participants = await conn.fetch("""
         SELECT u.username, u.first_name, u.last_name
         FROM event_participants ep
@@ -83,22 +84,25 @@ async def show_event_participants(message: Message, state: FSMContext):
     text = "👥 <b>Участники события:</b>\n\n"
     if participants:
         text += "\n".join(
-            f"• {r['last_name']} {r['first_name']} (@{r['username']})" if r['username']
-            else f"• {r['last_name']} {r['first_name']}" for r in participants
+            f"• {r['last_name']} {r['first_name']} (@{r['username']})"
+            if r['username']
+            else f"• {r['last_name']} {r['first_name']}"
+            for r in participants
         )
     else:
         text += "❌ Пока никто не присоединился."
 
     await message.answer(text, parse_mode="HTML")
 
+    # --- Исправленный запрос на «заявки» ---
     requests = await conn.fetch("""
-        SELECT inv.id AS invitation_id, u.first_name, u.last_name, u.username
+        SELECT inv.id AS invitation_id,
+               u.first_name, u.last_name, u.username
         FROM invitations inv
         JOIN users u ON u.id = inv.invited_user_id
         WHERE inv.event_id = $1
-    AND inv.approved_by_author IS NULL
-    AND inv.invited_user_id = inv.inviter_user_id  -- только заявки, поданные самими пользователями
-
+          AND inv.approved_by_author IS NULL
+          AND inv.inviter_user_id IS NULL
     """, event_id)
 
     await conn.close()
@@ -108,14 +112,25 @@ async def show_event_participants(message: Message, state: FSMContext):
 
     await message.answer("<b>Заявки на участие:</b>", parse_mode="HTML")
     for req in requests:
-        user_text = f"👤 {req['last_name']} {req['first_name']} (@{req['username']})" if req['username'] else f"👤 {req['last_name']} {req['first_name']}"
+        user_text = (
+            f"👤 {req['last_name']} {req['first_name']} (@{req['username']})"
+            if req['username']
+            else f"👤 {req['last_name']} {req['first_name']}"
+        )
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Принять", callback_data=f"approve_request:{req['invitation_id']}"),
-                InlineKeyboardButton(text="❌ Отклонить", callback_data=f"reject_request:{req['invitation_id']}")
+                InlineKeyboardButton(
+                    text="✅ Принять",
+                    callback_data=f"approve_request:{req['invitation_id']}"
+                ),
+                InlineKeyboardButton(
+                    text="❌ Отклонить",
+                    callback_data=f"reject_request:{req['invitation_id']}"
+                )
             ]
         ])
         await message.answer(user_text, reply_markup=kb)
+
 
 
 @router.callback_query(F.data.startswith("approve_request:"))

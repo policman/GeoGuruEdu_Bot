@@ -1,73 +1,70 @@
-import time
+# bot/handlers/learning/materials/search.py
 from aiogram import types
 from aiogram.fsm.context import FSMContext
-
 from bot.states.learning_states import MaterialSearch
 from bot.services.openalex import search_openalex
-from bot.services.semantic_scholar import search_papers
+from bot.keyboards.learning.materials.search import (
+    exit_and_favorites_keyboard, favorite_button, search_navigation_keyboard
+)
+from deep_translator import GoogleTranslator
 
-from bot.keyboards.learning.materials import exit_search_keyboard
-from bot.keyboards.learning.learning import learning_menu_keyboard
-from bot.keyboards.learning.materials.search import more_results_keyboard
+translator = GoogleTranslator(source='auto', target='ru')
 
-DELAY_SECONDS = 5  # защита от спама
 
-async def search_materials(message: types.Message, state: FSMContext):
+async def start_material_search(message: types.Message, state: FSMContext):
     await message.answer(
-        "🔍 Введите ключевые слова для поиска научных публикаций:",
-        reply_markup=exit_search_keyboard
+        "🔍 Введите запрос для поиска публикаций:",
+        reply_markup=exit_and_favorites_keyboard()
     )
     await state.set_state(MaterialSearch.waiting_for_query)
-    await state.update_data(last_query_time=0)
+
 
 async def handle_query(message: types.Message, state: FSMContext):
-    text = (message.text or "").strip()
-
-    if text == "❌ Закончить поиск":
-        await state.clear()
-        await message.answer("Поиск завершён", reply_markup=learning_menu_keyboard)
+    query = message.text.strip() if message.text else ""
+    if len(query) < 3:
+        await message.answer("⚠️ Минимум 3 символа.")
         return
 
-    if len(text) < 3:
-        await message.answer("⚠️ Минимум 3 символа")
+    try:
+        results = await search_openalex(query, per_page=3, page=1)
+    except Exception as e:
+        await message.answer(f"Ошибка при запросе OpenAlex: {e}")
         return
 
-    data = await state.get_data()
-    now = time.time()
-    if now - data.get("last_query_time", 0) < DELAY_SECONDS:
-        await message.answer("⏳ Подождите немного перед новым поиском.")
+    if not results:
+        await message.answer("❌ Ничего не найдено.")
         return
 
-    await state.update_data(last_query_time=now, query=text)
-    await message.answer("🔎 Выполняется поиск...")
+    # Сохраняем состояние
+    await state.update_data(query=query, page=1, results=results, favorites=[])
 
-    # Попытка №1: OpenAlex
-    openalex_results = await search_openalex(text)
-    if openalex_results:
-        for item in openalex_results:
-            title = item.get("title", "Без названия")
-            url = item.get("primary_location", {}).get("landing_page_url") or item.get("id", "")
-            reply = (
-                f"<b>{title}</b>\n"
-                f"🔗 <a href='{url}'>Ссылка</a>"
-            )
-            await message.answer(reply, parse_mode="HTML", disable_web_page_preview=True)
+    # Показываем первые 3 результата
+    for i, item in enumerate(results[:3]):
+        raw_title = item.get("title", "Без названия")
+        # Получаем русский вариант
+        ru_title = translator.translate(raw_title)
+        # Сравниваем оба, игнорируя регистр и пробелы по краям
+        if ru_title.strip().lower() != raw_title.strip().lower():
+            display_title = f"{ru_title} (Переведено)"
+        else:
+            display_title = raw_title
 
-        await message.answer("Показать ещё?", reply_markup=more_results_keyboard("openalex", 5))
-        return
+        authors = ', '.join(
+            auth.get("author", {}).get("display_name", "")
+            for auth in item.get("authorships", [])
+        )
+        year = item.get("publication_year", "")
+        url = item.get("primary_location", {}).get("landing_page_url") or item.get("id", "")
 
-    # Попытка №2: Semantic Scholar
-    scholar_results = await search_papers(text)
-    if scholar_results:
-        for paper in scholar_results:
-            reply = (
-                f"<b>{paper.get('title')}</b>\n"
-                f"🔗 <a href='{paper.get('url')}'>Ссылка</a>"
-            )
-            await message.answer(reply, parse_mode="HTML", disable_web_page_preview=True)
+        text = (
+            f"<b>{i + 1}. {display_title}</b>\n"
+            f"👤 {authors}\n"
+            f"📅 {year}\n\n"
+            f"🔗 <a href='{url}'>Ссылка</a>"
+        )
 
-        await message.answer("Показать ещё?", reply_markup=more_results_keyboard("scholar", 5))
-        return
+        await message.answer(text, parse_mode="HTML", reply_markup=favorite_button(i))
 
-    # Ничего не найдено
-    await message.answer("❌ Ничего не найдено в обеих базах.")
+    # Навигация
+    await message.answer("Навигация:", reply_markup=search_navigation_keyboard("openalex", 3))
+    await state.set_state(MaterialSearch.browsing_results)

@@ -31,6 +31,7 @@ async def start_handler(message: Message) -> None:
     conn = await asyncpg.connect(DATABASE_URL)
 
     existing = await get_user_by_telegram_id(conn, user.id)
+    print("💬 Telegram ID:", user.id)
     if not existing:
         user_data = {
             'last_name': user.last_name or 'Фамилия',

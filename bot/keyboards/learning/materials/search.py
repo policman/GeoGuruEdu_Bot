@@ -1,17 +1,23 @@
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
-# Только одна кнопка
-exit_search_keyboard = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="❌ Закончить поиск")]],
-    resize_keyboard=True
-)
-def more_results_keyboard(source: str, offset: int) -> InlineKeyboardMarkup:
+def exit_and_favorites_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="❌ Закончить поиск"), KeyboardButton(text="⭐ Избранное")]
+        ],
+        resize_keyboard=True
+    )
+
+def favorite_button(index: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(
-                text="🔽",
-                callback_data=f"more:{source}:{offset}"
-            )]
+            [InlineKeyboardButton(text="⭐ В избранное", callback_data=f"fav:{index}")]
+        ]
+    )
+
+def search_navigation_keyboard(source: str, offset: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➡️ Далее", callback_data=f"material_page:{source}:{offset}")]
         ]
     )

@@ -31,6 +31,7 @@ async def show_profile(message: Message, state: FSMContext):
 
     conn = await asyncpg.connect(DATABASE_URL)
     user = await get_user_by_telegram_id(conn, message.from_user.id)
+    print(f"Текущий user_id: {user}")
     await conn.close()
 
     if not user:

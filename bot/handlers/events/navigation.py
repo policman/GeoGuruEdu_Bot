@@ -21,16 +21,7 @@ async def back_to_source_list(callback: CallbackQuery, state: FSMContext):
             print("vverx")
             await callback.answer("❌ Неверный формат данных.")
 
-# @router.callback_query(lambda c: c.data and c.data.startswith("page:"))
-# async def paginate_events(callback: CallbackQuery, state: FSMContext):
-#     if callback.data:
-#         parts = callback.data.split(":")
-#         if len(parts) == 3:
-#             _, source, page = parts
-#             await show_event_list(callback, state, source=source, page=int(page))
-#         else:
-#             print("vnizu")
-#             await callback.answer("❌ Неверный формат данных.")
+
 
 # Reply кнопки
 @router.message(lambda m: m.text == "Мои события")

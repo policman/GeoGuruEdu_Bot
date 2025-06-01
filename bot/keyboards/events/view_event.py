@@ -27,8 +27,7 @@ def event_edit_inline_keyboard():
 
 visit_event_keyboard = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="Список событий"), KeyboardButton(text="Поиск")],
-        [KeyboardButton(text="Приглашения")],
+        [KeyboardButton(text="Список событий"), KeyboardButton(text="📩 Приглашения")],
         [KeyboardButton(text="⬅️ В меню")],
     ],
     resize_keyboard=True

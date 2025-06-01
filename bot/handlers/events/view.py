@@ -1,8 +1,6 @@
 from aiogram import Router
-from aiogram.types import (
-    Message, CallbackQuery, InputMediaPhoto, InputMediaAudio, 
-    InputMediaDocument, InputMediaVideo, ReplyKeyboardRemove
-)
+from aiogram.types import Message, CallbackQuery, InputMediaPhoto, ReplyKeyboardRemove
+
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import StateFilter
 from typing import Union, Optional, cast
@@ -14,7 +12,6 @@ from dotenv import load_dotenv
 from bot.keyboards.events.my_events import my_events_keyboard
 
 from aiogram import Bot
-from aiogram.utils.media_group import MediaGroupBuilder
 
 from bot.states.event_states import EventView
 from bot.services.event_service import EventService
@@ -32,7 +29,6 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 router = Router()
 
-MediaType = InputMediaAudio | InputMediaDocument | InputMediaPhoto | InputMediaVideo
 
 
 async def show_event_list(
@@ -113,72 +109,6 @@ async def handle_archive_events(message: Message, state: FSMContext):
     await show_event_list(message, state, source="archive", page=0)
 
 
-# @router.callback_query(StateFilter(EventView.viewing_events), lambda c: c.data and c.data.startswith("event:"))
-# async def handle_show_event(callback: CallbackQuery, state: FSMContext):
-#     await callback.answer()
-#     msg = callback.message
-#     if not callback.data or msg is None or not isinstance(msg, Message):
-#         return
-
-#     parts = callback.data.split(":")
-#     if len(parts) != 4:
-#         return
-#     _, event_id, source, page = parts
-
-#     conn = await asyncpg.connect(DATABASE_URL)
-#     event_service = EventService(conn)
-#     event = await event_service.get_event_by_id(int(event_id))
-#     await conn.close()
-
-#     if not event:
-#         await msg.answer("Событие не найдено.")
-#         return
-
-#     price = "бесплатно" if event["price"] == 0 else f"{event['price']}₽"
-#     caption = (
-#         f"<b>{event['title']}</b>\n\n"
-#         f"<i>{event['description']}</i>"
-#     )
-
-#     try:
-#         await msg.delete()
-#     except Exception:
-#         pass
-
-#     photos = event.get("photos") or []
-#     if photos:
-#         media = [InputMediaPhoto(media=photos[0], caption=caption, parse_mode="HTML")]
-#         media.extend([InputMediaPhoto(media=photo) for photo in photos[1:]])
-#         await msg.answer_media_group(
-#             cast(
-#                 list[MediaType],  
-#                 media
-#             )
-#         )
-#     else:
-#         await msg.answer(caption, parse_mode="HTML")
-
-#     videos = event.get("videos") or []
-#     for video in videos:
-#         await msg.answer_video(video)
-
-#     from_user = callback.from_user
-#     user_id = from_user.id if from_user else None
-
-    
-#     await msg.answer(
-#         f"{format_event_dates(event['start_date'], event['end_date'])} • {price} • {event['organizers']}\n",
-#         reply_markup=manage_event_reply_keyboard()
-#     )
-#     await msg.answer(
-#         "Редактировать событие:",
-#         reply_markup=manage_event_keyboard(event, user_id, source, page)
-#     )
-
-#     await state.set_state(EventView.viewing_events)
-#     await state.update_data(event_id=event['id'], source=source, page=page)
-
-
 @router.callback_query(StateFilter(EventView.viewing_events), lambda c: c.data and c.data.startswith("event:"))
 async def handle_show_event(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
@@ -197,6 +127,9 @@ async def handle_show_event(callback: CallbackQuery, state: FSMContext):
         await msg.answer("Событие не найдено.")
         return
 
+    await state.update_data(event_id=event["id"], source=source, page=page)
+
+
     try:
         await msg.delete()
     except Exception:
@@ -208,32 +141,26 @@ async def handle_show_event(callback: CallbackQuery, state: FSMContext):
     price = "бесплатно" if event["price"] == 0 else f"{event['price']}₽"
     full_caption = f"<b>{event['title']}</b>\n\n<i>{event['description']}</i>"
 
-    # === Сообщение 1: Все медиа ===
-    media_group = MediaGroupBuilder()
+    # === Сообщение 1: Одно фото с описанием ===
+    photo = event.get("photo")
+    if photo:
+        await bot.send_photo(
+            chat_id=msg.chat.id,
+            photo=photo,
+            caption=full_caption,
+            parse_mode="HTML"
+        )
+    else:
+        await bot.send_message(
+            chat_id=msg.chat.id,
+            text=full_caption,
+            parse_mode="HTML"
+        )
 
-    photos = event.get("photos") or []
-    videos = event.get("videos") or []
 
-    if photos:
-        media_group.add_photo(media=photos[0], caption=full_caption, parse_mode="HTML")
-        for photo in photos[1:]:
-            media_group.add_photo(media=photo)
-
-    elif videos:
-        media_group.add_video(media=videos[0], caption=full_caption, parse_mode="HTML")
-        for video in videos[1:]:
-            media_group.add_video(media=video)
-
-    # Добавим остальные медиа, если и фото и видео есть
-    if photos and videos:
-        for video in videos:
-            media_group.add_video(media=video)
-
-    if media_group.build():
-        await bot.send_media_group(chat_id=msg.chat.id, media=media_group.build())
 
     # === Сообщение 2: Описание и reply-клавиатура ===
-    details_text = f"{format_event_dates(event['start_date'], event['end_date'])} • {price} • {event['organizers']}"
+    details_text = f"📅 Дата: {format_event_dates(event['start_date'], event['end_date'])}\n💰 Цена: {price}\n👤 Организатор: {event['organizers']}"
     await bot.send_message(
         chat_id=msg.chat.id,
         text=details_text,
@@ -249,8 +176,6 @@ async def handle_show_event(callback: CallbackQuery, state: FSMContext):
 
     await state.set_state(EventView.viewing_events)
     await state.update_data(event_id=event['id'], source=source, page=page)
-
-
 
 # --- Хендлеры для reply-кнопок ---
 @router.message(lambda m: m.text == "📨 Разослать приглашения")
@@ -354,3 +279,18 @@ async def cancel_delete_reply(message: Message, state: FSMContext):
     )
     await handle_show_event(fake_callback, state)
 
+@router.callback_query(StateFilter(EventView.viewing_events), lambda c: c.data and c.data.startswith("page:"))
+async def handle_pagination(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    msg = callback.message
+    if not callback.data or msg is None:
+        return
+
+    try:
+        _, source, page = callback.data.split(":")
+        page = int(page)
+    except ValueError:
+        await msg.answer("Ошибка навигации.")  # type: ignore
+        return
+
+    await show_event_list(callback, state, source=source, page=page)

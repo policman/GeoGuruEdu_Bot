@@ -3,7 +3,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import StateFilter
 from datetime import datetime
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto, InputMediaVideo
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
 
 from bot.keyboards.events.view_event import visit_event_keyboard
 from bot.states.event_states import VisitEvent
@@ -11,7 +11,7 @@ from .show_event_list import show_event_list
 
 router = Router()
 
-@router.message(lambda m: m.text == "Посетить событие")
+@router.message(lambda m: m.text == "Посетить")
 async def handle_visit_event_menu(message: Message, state: FSMContext):
     await state.clear()
     await state.set_state(VisitEvent.menu)
@@ -149,6 +149,7 @@ async def paginate_events(callback: CallbackQuery, state: FSMContext):
     elif callback.data == "page:prev":
         page = max(current_page - 1, 0)
     else:
+        print("fdfdf")
         await callback.answer("❌ Неверный формат данных.")
         return
 
@@ -195,10 +196,13 @@ async def handle_apply_event(callback: CallbackQuery, state: FSMContext):
     exists = await conn.fetchval("""
         SELECT EXISTS (
             SELECT 1 FROM event_participants WHERE user_id = $1 AND event_id = $2
-            UNION
-            SELECT 1 FROM invitations WHERE invited_user_id = $1 AND event_id = $2
+        )
+        OR EXISTS (
+            SELECT 1 FROM invitations 
+            WHERE invited_user_id = $1 AND event_id = $2
         )
     """, user_id, event_id)
+
 
     if exists:
         await callback.answer("Вы уже участвуете или подали заявку.")
@@ -211,6 +215,8 @@ async def handle_apply_event(callback: CallbackQuery, state: FSMContext):
     """, event_id, user_id)
     await conn.close()
 
+    await state.update_data(event_id=event_id)
+    
     await callback.answer("Заявка подана!")
     msg = callback.message
     if isinstance(msg, Message):
