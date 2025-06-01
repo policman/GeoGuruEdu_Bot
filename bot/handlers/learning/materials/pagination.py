@@ -1,63 +1,84 @@
-from aiogram import types
+# bot/handlers/learning/materials/pagination.py
+from aiogram import types, Router
 from aiogram.fsm.context import FSMContext
-from bot.services.semantic_scholar import search_papers
+from aiogram.types import Message, CallbackQuery
+from typing import cast
+
 from bot.services.openalex import search_openalex
-from bot.keyboards.learning.materials.search import more_results_keyboard
+from bot.keyboards.learning.materials.search import (
+    favorite_button, search_navigation_keyboard
+)
 from bot.states.learning_states import MaterialSearch
+from deep_translator import GoogleTranslator
 
-MAX_RESULTS = 30  # максимум сколько можно пролистывать
+router = Router()
+ITEMS_PER_PAGE = 3
 
-async def show_more_results(callback: types.CallbackQuery, state: FSMContext):
-    if not callback.data or not isinstance(callback.message, types.Message):
+translator = GoogleTranslator(source='auto', target='ru')
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("material_page:"))
+async def show_more_results(callback: CallbackQuery, state: FSMContext):
+    if not callback.message or not isinstance(callback.message, Message):
+        await callback.answer("Ошибка: сообщение недоступно.")
         return
+    msg = cast(Message, callback.message)
+
+    # Удаляем старую панель навигации
+    await msg.delete()
+
+    if not callback.data:
+        return
+
     parts = callback.data.split(":")
     if len(parts) != 3:
-        return
-    _, source, offset = parts
-    try:
-        offset = int(offset)
-    except ValueError:
-        await callback.answer("Ошибка в данных.")
+        await callback.answer("Неверные данные.")
         return
 
-    await callback.answer()
-    await callback.message.edit_reply_markup()  # удалим старую кнопку
+    _, source, page_str = parts
+    try:
+        page = int(page_str)
+    except ValueError:
+        await callback.answer("Неверный номер страницы.")
+        return
 
     data = await state.get_data()
-    query = data.get("query")
-
-    if not query:
-        await callback.message.answer("⚠️ Ошибка: предыдущий запрос не найден.")
+    query = data.get("query", "")
+    if not isinstance(query, str) or not query:
+        await msg.answer("⚠️ Ошибка: предыдущий запрос не найден.")
         return
 
-    if offset >= MAX_RESULTS:
-        await callback.message.answer("📌 Достигнут предел результатов.")
+    results = await search_openalex(query, per_page=ITEMS_PER_PAGE, page=page)
+    if not results:
+        await msg.answer("📭 Больше результатов нет.")
+        await callback.answer()
         return
 
-    if source == "scholar":
-        results = await search_papers(query, offset + 5)
-        title = "Ещё:"
-    else:
-        results = await search_openalex(query, offset + 5)
-        title = "Ещё:"
+    await state.update_data(page=page, results=results)
 
-    if not results or offset >= len(results):
-        await callback.message.answer("📭 Больше результатов не найдено.")
-        return
-
-    await callback.message.answer(title)
-
-    # Показать только текущую "страницу"
-    for paper in results[offset:offset + 5]:
-        if source == "scholar":
-            text = (
-                f"<b>{paper.get('title')}</b>\n"
-                f"🔗 <a href='{paper.get('url')}'>Ссылка</a>"
-            )
+    for i, item in enumerate(results):
+        raw_title = item.get("title", "Без названия")
+        ru_title = translator.translate(raw_title)
+        if ru_title.strip().lower() != raw_title.strip().lower():
+            display_title = f"{ru_title} (Переведено)"
         else:
-            url = paper.get("primary_location", {}).get("landing_page_url") or paper.get("id", "")
-            text = (
-                f"<b>{paper.get('title')}</b>\n"
-                f"🔗 <a href='{url}'>Ссылка</a>"
-            )
-        await callback.message.answer(text, parse_mode="HTML", disable_web_page_preview=True)
+            display_title = raw_title
+
+        authors = ', '.join(
+            auth.get("author", {}).get("display_name", "") for auth in item.get("authorships", [])
+        )
+        year = item.get("publication_year", "")
+        url = item.get("primary_location", {}).get("landing_page_url") or item.get("id", "")
+
+        number = (page - 1) * ITEMS_PER_PAGE + i + 1
+        text = (
+            f"<b>{number}. {display_title}</b>\n"
+            f"👤 {authors}\n"
+            f"📅 {year}\n\n"
+            f"🔗 <a href='{url}'>Ссылка</a>"
+        )
+        await msg.answer(text, parse_mode="HTML", reply_markup=favorite_button(i))
+
+    # Новая панель навигации
+    await msg.answer("Навигация:", reply_markup=search_navigation_keyboard(source, page + 1))
+    await callback.answer()

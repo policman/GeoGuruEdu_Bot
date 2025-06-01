@@ -14,7 +14,6 @@ events = Table(
     Column("end_date", Date),
     Column("organizers", String),
     Column("price", Integer),
-    Column("photos", ARRAY(Text)),   
-    Column("videos", ARRAY(Text)),   
+    Column("photo", ARRAY(Text)),   
     Column("creator_id", Integer, ForeignKey("users.id", ondelete="SET NULL")),
 )

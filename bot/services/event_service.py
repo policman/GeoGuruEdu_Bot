@@ -10,12 +10,12 @@ class EventService:
 
     async def insert_event(self, event_data: dict) -> int:
         row = await self.conn.fetchrow("""
-            INSERT INTO events (author_id, title, description, start_date, end_date, organizers, price, photos, videos, is_draft)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            INSERT INTO events (author_id, title, description, start_date, end_date, organizers, price, photo, is_draft)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING id
         """, event_data['author_id'], event_data['title'], event_data['description'],
              event_data['start_date'], event_data['end_date'], event_data['organizers'],
-             event_data['price'], event_data['photos'], event_data['videos'], event_data.get('is_draft', True))
+             event_data['price'], event_data['photo'], event_data.get('is_draft', True))
         if not row:
             raise RuntimeError("Не удалось добавить событие в базу данных!")
         return row["id"]

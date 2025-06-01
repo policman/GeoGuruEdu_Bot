@@ -6,7 +6,7 @@ from aiogram.fsm.context import FSMContext
 from .entry import events_entry
 from .create import (
     start_event_creation, set_title, set_description, set_dates, set_organizers,
-    set_price, set_photos, confirm_photos, set_videos, confirm_event, cancel_creation
+    set_price, set_photos, confirm_event, cancel_creation
 )
 from .view import (
     show_event_list, handle_active_events, handle_created_events, handle_archive_events, handle_show_event
@@ -16,11 +16,14 @@ from .view import router as view_router
 from .manage import router as manage_router
 from .navigation import router as navigation_router
 from .visit_event import router as visit_event_router
+from .invitations import router as invitations_router
 from .invite_event import router as invite_event_router
+
 
 router = Router()
 
 router.include_router(invite_event_router)
+router.include_router(invitations_router)
 router.include_router(view_router)
 router.include_router(manage_router)
 router.include_router(navigation_router)
@@ -56,9 +59,12 @@ async def handle_return_to_main_menu(message: Message, state: FSMContext):
     await return_to_main_menu(message, state)
 
 # CREATE
-@router.message(lambda m: m.text == "Создать событие")
+@router.message(lambda m: m.text == "Создать")
 async def handle_start_creation(message: Message, state: FSMContext):
     await start_event_creation(message, state)
+@router.message(StateFilter(EventCreation), lambda m: m.text == "❌ Отменить создание")
+async def handle_cancel_creation_anytime(message: Message, state: FSMContext):
+    await cancel_creation(message, state)
 
 @router.message(StateFilter(EventCreation.waiting_for_title))
 async def handle_title(message: Message, state: FSMContext):
@@ -78,12 +84,6 @@ async def handle_price(message: Message, state: FSMContext):
 @router.message(StateFilter(EventCreation.waiting_for_photos), lambda m: m.content_type == "photo")
 async def handle_photos(message: Message, state: FSMContext):
     await set_photos(message, state)
-@router.message(StateFilter(EventCreation.waiting_for_photos), lambda m: m.text == "✅ Готово")
-async def handle_confirm_photos(message: Message, state: FSMContext):
-    await confirm_photos(message, state)
-@router.message(StateFilter(EventCreation.waiting_for_videos), lambda m: m.content_type in ("video", "text"))
-async def handle_videos(message: Message, state: FSMContext):
-    await set_videos(message, state)
 @router.message(StateFilter(EventCreation.confirmation), lambda m: m.text == "✅ Готово")
 async def handle_confirm_event(message: Message, state: FSMContext):
     await confirm_event(message, state)
@@ -92,15 +92,15 @@ async def handle_cancel_event(message: Message, state: FSMContext):
     await cancel_creation(message, state)
 
 # VIEW
-@router.message(StateFilter(EventView.choosing_category), lambda m: m.text == "📌 Активные")
+@router.message(StateFilter(EventView.choosing_category, EventView.viewing_events), lambda m: m.text == "📌 Активные")
 async def choosing_active(message: Message, state: FSMContext):
     await show_event_list(message, state, source="active", page=0)
 
-@router.message(StateFilter(EventView.choosing_category), lambda m: m.text == "🛠 Созданные")
+@router.message(StateFilter(EventView.choosing_category, EventView.viewing_events), lambda m: m.text == "🛠 Созданные")
 async def choosing_created(message: Message, state: FSMContext):
     await show_event_list(message, state, source="created", page=0)
 
-@router.message(StateFilter(EventView.choosing_category), lambda m: m.text == "📦 Архивные")
+@router.message(StateFilter(EventView.choosing_category, EventView.viewing_events), lambda m: m.text == "📦 Архивные")
 async def choosing_archive(message: Message, state: FSMContext):
     await show_event_list(message, state, source="archive", page=0)
 

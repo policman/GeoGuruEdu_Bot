@@ -23,7 +23,7 @@ def main_menu_keyboard(invite_count=0):
     invite_text = f"Приглашения ({invite_count})" if invite_count else "Приглашения"
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="Посетить событие")],
+            [KeyboardButton(text="Посетить")],
             [KeyboardButton(text=invite_text)],
             [KeyboardButton(text="Мои события")],
         ],

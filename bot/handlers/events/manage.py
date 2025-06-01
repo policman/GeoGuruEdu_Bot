@@ -23,8 +23,7 @@ class EventEdit(StatesGroup):
     editing_end_date = State()
     editing_organizers = State()
     editing_price = State()
-    editing_photos = State()
-    editing_videos = State()
+    editing_photo = State()
 
 
 # --- Клавиатура выбора поля ---
@@ -36,8 +35,8 @@ def edit_event_fields_keyboard(event_id, source, page):
         [InlineKeyboardButton(text="Дата окончания", callback_data=f"editfield:end_date:{event_id}:{source}:{page}")],
         [InlineKeyboardButton(text="Организатор", callback_data=f"editfield:organizers:{event_id}:{source}:{page}")],
         [InlineKeyboardButton(text="Стоимость", callback_data=f"editfield:price:{event_id}:{source}:{page}")],
-        [InlineKeyboardButton(text="Фото", callback_data=f"editfield:photos:{event_id}:{source}:{page}")],
-        [InlineKeyboardButton(text="Видео", callback_data=f"editfield:videos:{event_id}:{source}:{page}")],
+        [InlineKeyboardButton(text="Фото", callback_data=f"editfield:photo:{event_id}:{source}:{page}")]
+,
         [InlineKeyboardButton(text="✅ Сохранить и выйти", callback_data=f"editfield:save:{event_id}:{source}:{page}")],
         [InlineKeyboardButton(text="❌ Отмена", callback_data=f"editfield:cancel:{event_id}:{source}:{page}")]
     ])
@@ -170,16 +169,19 @@ async def handle_choose_field(callback: CallbackQuery, state: FSMContext):
         from bot.handlers.events.view import handle_show_event
         # Создаём псевдо-колбэк с такими же данными
         class FakeCallback:
-            def __init__(self, message, data, from_user):
+            def __init__(self, message, data, from_user, bot):
                 self.message = message
                 self.data = data
                 self.from_user = from_user
+                self.bot = bot  # <=== добавляем bot
             async def answer(self, *args, **kwargs): return None
         fake_callback = FakeCallback(
             message=callback.message,
             data=f"event:{event_id}:{source}:{page}",
-            from_user=callback.from_user
+            from_user=callback.from_user,
+            bot=callback.bot  # <=== передаём bot из оригинального колбэка
         )
+
         await handle_show_event(fake_callback, state)
         return
     if field == "cancel":
@@ -194,8 +196,7 @@ async def handle_choose_field(callback: CallbackQuery, state: FSMContext):
     "end_date": "Введите новую дату окончания (ГГГГ-ММ-ДД):",
     "organizers": "Введите нового организатора:",
     "price": "Введите новую стоимость (число, 0 = бесплатно):",
-    "photos": "Пришлите новое(ые) фото (можно несколько).",
-    "videos": "Пришлите новое(ые) видео (можно несколько)."
+    "photo": "Пришлите новое фото.",
     }
 
     await state.update_data(field=field)
@@ -203,44 +204,23 @@ async def handle_choose_field(callback: CallbackQuery, state: FSMContext):
     if callback.message and isinstance(callback.message, Message):
         await callback.message.edit_text(prompts[field])
 
-@router.message(EventEdit.editing_photos)
-async def save_photos(message: Message, state: FSMContext):
+@router.message(EventEdit.editing_photo)
+async def save_photo(message: Message, state: FSMContext):
+    if not message.photo:
+        await message.answer("Пожалуйста, пришлите фото.")
+        return
+
+    file_id = message.photo[-1].file_id
     data = await state.get_data()
     fields = data.get("fields", {})
-    current_photos = fields.get("photos", [])
+    fields["photo"] = file_id
+    await state.update_data(fields=fields)
+    await state.set_state(EventEdit.choosing_field)
+    await message.answer(
+        "Фото обновлено. Что ещё изменить?",
+        reply_markup=edit_event_fields_keyboard(data["event_id"], data["source"], data["page"])
+    )
 
-    if message.photo:
-        largest_photo_id = message.photo[-1].file_id
-
-        if largest_photo_id not in current_photos:
-            if len(current_photos) < 5:
-                current_photos.append(largest_photo_id)
-                fields["photos"] = current_photos
-                await state.update_data(fields=fields)
-                await state.set_state(EventEdit.choosing_field)
-                await message.answer(
-                    f"Фото добавлено ({len(current_photos)}/5). Что ещё изменить?",
-                    reply_markup=edit_event_fields_keyboard(data["event_id"], data["source"], data["page"])
-                )
-            else:
-                await message.answer("Можно загрузить не более 5 фото.")
-        else:
-            await message.answer("Это фото уже добавлено.")
-    else:
-        await message.answer("Пришлите фото!")
-
-
-@router.message(EventEdit.editing_videos)
-async def save_videos(message: Message, state: FSMContext):
-    data = await state.get_data()
-    fields = data.get("fields", {})
-    if message.video:
-        fields["videos"] = [message.video.file_id]
-        await state.update_data(fields=fields)
-        await state.set_state(EventEdit.choosing_field)
-        await message.answer("Видео обновлено. Что ещё изменить?", reply_markup=edit_event_fields_keyboard(data["event_id"], data["source"], data["page"]))
-    else:
-        await message.answer("Пришлите видео!")
 
 # --- Сохраняем значения каждого поля во временное хранилище FSM (не в БД!) ---
 @router.message(EventEdit.editing_title)

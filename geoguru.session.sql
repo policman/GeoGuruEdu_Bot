@@ -1,24 +1,34 @@
--- Генерация событий для пользователей 1, 2, 3, 4
-INSERT INTO events (title, description, start_date, end_date, organizers, price, author_id, is_draft)
-SELECT
-    CONCAT('Событие ', u.id, '.', s.num) AS title,
-    CONCAT('Описание для события ', u.id, '.', s.num) AS description,
-    CASE
-        WHEN s.num <= 2 THEN CURRENT_DATE - (s.num * INTERVAL '10 days')            -- архивные
-        ELSE CURRENT_DATE + INTERVAL '60 days' + (s.num * INTERVAL '2 days')       -- будущие
-    END AS start_date,
-    CASE
-        WHEN s.num <= 2 THEN CURRENT_DATE - (s.num * INTERVAL '10 days') + INTERVAL '1 day'
-        ELSE CURRENT_DATE + INTERVAL '60 days' + (s.num * INTERVAL '2 days') + INTERVAL '1 day'
-    END AS end_date,
-    CONCAT('Организатор ', u.id) AS organizers,
-    0 AS price,
-    u.id AS author_id,
-    FALSE AS is_draft
-FROM (SELECT 1 AS id UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4) AS u
-CROSS JOIN generate_series(1, 5) AS s(num);
+ALTER TABLE events
+ALTER COLUMN photos TYPE TEXT USING photos[1];
+
+ALTER TABLE events RENAME COLUMN photos TO photo;
+
+CREATE TABLE favorite_materials (
+    id SERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    title TEXT NOT NULL,
+    url TEXT,
+    authors TEXT,
+    year TEXT,
+    annotation TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+
+DELETE FROM event_participants WHERE event_id IN (SELECT id FROM events);
+DELETE FROM invitations       WHERE event_id IN (SELECT id FROM events);
+DELETE FROM events;
 
 
 
-ALTER TABLE invitations
-ADD COLUMN approved_by_author BOOLEAN;
+CREATE TABLE participant_messages (
+  id            SERIAL PRIMARY KEY,
+  event_id      INT        NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  from_user_id  INT        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  to_user_id    INT        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  message_text  TEXT       NOT NULL CHECK (length(message_text) <= 300),
+  created_at    TIMESTAMP  NOT NULL DEFAULT NOW(),
+  is_answered   BOOLEAN    NOT NULL DEFAULT FALSE,
+  answer_text   TEXT,
+  answered_at   TIMESTAMP
+);

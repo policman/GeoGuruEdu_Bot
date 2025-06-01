@@ -7,7 +7,6 @@ class EventCreation(StatesGroup):
     waiting_for_organizers = State()
     waiting_for_price = State()
     waiting_for_photos = State()
-    waiting_for_videos = State()
     confirmation = State()
 
     __all_states__ = (
@@ -17,7 +16,6 @@ class EventCreation(StatesGroup):
         waiting_for_organizers,
         waiting_for_price,
         waiting_for_photos,
-        waiting_for_videos,
         confirmation,
     )
 

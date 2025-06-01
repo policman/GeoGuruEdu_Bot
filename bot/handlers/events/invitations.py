@@ -13,7 +13,7 @@ from bot.config import DATABASE_URL
 router = Router()
 
 # --- Хендлер: Список приглашений ---
-@router.message(lambda m: m.text == "Приглашения")
+@router.message(lambda m: m.text == "📩 Приглашения")
 async def handle_invitations(message: Message, state):
     if not message.from_user:
         await message.answer("Не удалось определить пользователя.")
