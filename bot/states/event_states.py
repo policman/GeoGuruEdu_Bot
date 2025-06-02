@@ -23,7 +23,9 @@ class EventView(StatesGroup):
     choosing_category = State()
     viewing_events = State()
     back_to_my_events = State()
-
+    writing_to_organizer = State()   # участник пишет сообщение организатору
+    viewing_answers      = State()   # участник просматривает ответы организатора
+    paging_answers       = State()   # состояние для навигации по списку ответов
 
 
 class EventEdit(StatesGroup):
@@ -52,7 +54,11 @@ class VisitEvent(StatesGroup):
     filter_date_range = State()
     filter_start_date = State()  # ← Добавь это
     filter_end_date = State()    # ← И это
-# from aiogram.fsm.state import StatesGroup, State
 
-# class EventManageFSM(StatesGroup):
-#     viewing_event = State()  # состояние просмотра одного события
+class InvitationStates(StatesGroup):
+    CHOOSING_METHOD = State()             # выбрать один из 4 способов
+    ENTER_DEPARTMENTS = State()           # вводим отделы (через запятую)
+    ENTER_PROFILES = State()              # вводим профили (через запятую)
+    CONFIRM_DEPTS_PROFS = State()         # подтверждаем рассылку по отделам/профилям
+    CONFIRM_COLLEAGUES = State()          # подтверждаем рассылку «всем сотрудникам»
+    CONFIRM_ALL = State()                 # подтверждаем рассылку «всем»

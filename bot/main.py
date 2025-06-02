@@ -12,8 +12,6 @@ from run_migrations import main as run_migrations_main
 async def set_default_commands(bot: Bot):
     await bot.set_my_commands([
         BotCommand(command="start", description="Перезапустить бота"),
-        #BotCommand(command="help", description="Справка"),
-        #BotCommand(command="menu", description="Показать главное меню"),
     ])
 
 async def main():
@@ -24,13 +22,12 @@ async def main():
 
     bot = Bot(
         token=BOT_TOKEN,
-        parse_mode=ParseMode.HTML  # ВОТ ТАК!
+        parse_mode=ParseMode.HTML
     )
 
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
 
-    # Импорт хендлеров и роутеров
     from bot.handlers import start
     from bot.handlers import profile
     from bot.handlers.events import router as events_router
@@ -38,14 +35,20 @@ async def main():
     from bot.handlers.learning import learning_router
     from bot.handlers.learning.materials.favorites import router as favorites_router
     from bot.handlers.learning.materials.pagination import router as pagination_router
+    from bot.handlers.events.chat import router as chat_router
 
-    dp.include_router(events_router)  
+    #from bot.handlers.events.invite_event import router as invite_router
+
+
+    dp.include_router(events_router)
     dp.include_router(start.router)
     dp.include_router(profile.router)
     dp.include_router(ai_chat_router)
     dp.include_router(learning_router)
     dp.include_router(pagination_router)
     dp.include_router(favorites_router)
+    dp.include_router(chat_router)
+    #dp.include_router(invite_router)
 
     await set_default_commands(bot)
     await run_migrations_main()

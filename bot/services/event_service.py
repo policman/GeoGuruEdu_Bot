@@ -88,3 +88,84 @@ class EventService:
         sql = f"UPDATE events SET {', '.join(fields)} WHERE id = ${len(values)+1}"
         values.append(event_id)
         await self.conn.execute(sql, *values)
+
+    async def get_participant_ids(self, user_id: int) -> set[int]:
+        rows = await self.conn.fetch(
+            "SELECT event_id FROM event_participants WHERE user_id = $1", user_id
+        )
+        return {r["event_id"] for r in rows}
+
+    async def get_applied_ids(self, user_id: int) -> set[int]:
+        rows = await self.conn.fetch(
+            """
+            SELECT event_id 
+            FROM invitations 
+            WHERE invited_user_id = $1
+              AND inviter_user_id IS NULL
+              AND is_accepted IS NULL
+            """,
+            user_id
+        )
+        return {r["event_id"] for r in rows}
+
+    async def get_participant_counts(self) -> dict[int, int]:
+        rows = await self.conn.fetch(
+            "SELECT event_id, COUNT(*) AS cnt FROM event_participants GROUP BY event_id"
+        )
+        return {r["event_id"]: r["cnt"] for r in rows}
+
+
+    # ----------------------------------------
+    # Новые методы для таблицы participant_messages
+    # ----------------------------------------
+
+    async def save_participant_message(self, event_id: int, from_user_id: int, to_user_id: int, text: str):
+        """
+        Сохраняет сообщение от участника к организатору (is_answered = FALSE).
+        """
+        now = datetime.datetime.now()
+        await self.conn.execute(
+            """
+            INSERT INTO participant_messages (
+                event_id, from_user_id, to_user_id, message_text, created_at, is_answered
+            ) VALUES ($1, $2, $3, $4, $5, FALSE)
+            """,
+            event_id, from_user_id, to_user_id, text, now
+        )
+
+    async def fetch_answers_for_participant(self, event_id: int, participant_id: int, organizer_id: int, limit: int, offset: int):
+        """
+        Возвращает список записей, где организатор ответил участнику по данному событию:
+        each row has (id, message_text, answer_text, answered_at).
+        """
+        rows = await self.conn.fetch(
+            """
+            SELECT id, message_text, answer_text, answered_at
+            FROM participant_messages
+            WHERE event_id = $1
+              AND from_user_id = $2
+              AND to_user_id = $3
+              AND is_answered = TRUE
+            ORDER BY answered_at DESC
+            LIMIT $4 OFFSET $5
+            """,
+            event_id, participant_id, organizer_id, limit, offset
+        )
+        return rows
+
+    async def count_answers_for_participant(self, event_id: int, participant_id: int, organizer_id: int):
+        """
+        Считает общее число ответов от организатора участнику по событию.
+        """
+        row = await self.conn.fetchrow(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM participant_messages
+            WHERE event_id = $1
+              AND from_user_id = $2
+              AND to_user_id = $3
+              AND is_answered = TRUE
+            """,
+            event_id, participant_id, organizer_id
+        )
+        return row["cnt"] if row else 0
