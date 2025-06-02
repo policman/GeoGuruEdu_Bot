@@ -8,3 +8,7 @@ class EditProfile(StatesGroup):
     editing_position = State()
     editing_experience = State()
     editing_department = State()
+
+class UserProfileStates(StatesGroup):
+    POSITION = State()
+    DEPARTMENT = State()

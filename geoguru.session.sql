@@ -32,3 +32,12 @@ CREATE TABLE participant_messages (
   answer_text   TEXT,
   answered_at   TIMESTAMP
 );
+
+UPDATE users
+SET position = 'Сотрудник',
+    department = NULL
+WHERE id = 1;
+
+ALTER TABLE users
+  ADD COLUMN place_of_work TEXT,
+  ADD COLUMN open_to_offers BOOLEAN DEFAULT TRUE;

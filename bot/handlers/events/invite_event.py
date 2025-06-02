@@ -1,208 +1,519 @@
-from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram import Router, F
+from aiogram.types import Message, ReplyKeyboardRemove, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.context import FSMContext
-from aiogram.exceptions import TelegramForbiddenError
+from aiogram.filters import StateFilter
 import asyncpg
-import datetime
+from datetime import datetime
 
 from bot.config import DATABASE_URL
+from bot.states.event_states import InvitationStates
+from bot.keyboards.events.manage_event import (
+    invite_method_keyboard,
+    invite_confirm_keyboard,
+)
+from bot.handlers.events.view import handle_show_event
 
 router = Router()
 
+
+# 1) Нажатие «📨 Разослать приглашения» → показываем меню выбора метода
 @router.message(lambda m: m.text == "📨 Разослать приглашения")
-async def handle_send_invitations(message: Message, state: FSMContext):
+async def choose_invite_method(message: Message, state: FSMContext):
     data = await state.get_data()
     event_id = data.get("event_id")
     if not event_id:
-        await message.answer("Не удалось определить событие для рассылки приглашений.")
+        await message.answer("Ошибка: событие не выбрано.", reply_markup=ReplyKeyboardRemove())
         return
 
-    if not message.from_user:
-        await message.answer("Не удалось определить пользователя Telegram.")
-        return
-
-    telegram_id = message.from_user.id
-    conn = await asyncpg.connect(DATABASE_URL)
-    user_row = await conn.fetchrow("SELECT id FROM users WHERE telegram_id = $1", telegram_id)
-    if not user_row:
-        await conn.close()
-        await message.answer("Пользователь не найден в системе.")
-        return
-    user_id = user_row['id']
-
-    row = await conn.fetchrow("""
-        SELECT created_at FROM invitations
-        WHERE event_id = $1 AND inviter_user_id = $2
-        ORDER BY created_at DESC LIMIT 1
-    """, event_id, user_id)
-
-    if row and (datetime.datetime.now() - row['created_at']).total_seconds() < 5:
-        await conn.close()
-        await message.answer("Подождите 5 секунд перед следующей рассылкой приглашений.")
-        return
-
-    users = await conn.fetch("""
-        SELECT id FROM users
-        WHERE id != $1
-          AND id NOT IN (
-              SELECT invited_user_id FROM invitations
-              WHERE event_id = $2 AND is_accepted = FALSE
-          )
-    """, user_id, event_id)
-
-    invited_count = 0
-    for user in users:
-        await conn.execute("""
-            INSERT INTO invitations (event_id, invited_user_id, inviter_user_id, is_read, is_accepted, created_at)
-            VALUES ($1, $2, $3, FALSE, NULL, $4)
-            ON CONFLICT DO NOTHING
-        """, event_id, user["id"], user_id, datetime.datetime.now())
-        invited_count += 1
-
-    await conn.close()
-    await message.answer(f"✅ Приглашения разосланы!")
+    await state.set_state(InvitationStates.CHOOSING_METHOD)
+    await message.answer(
+        "Выберите способ рассылки приглашений:",
+        reply_markup=invite_method_keyboard()
+    )
 
 
-@router.message(F.text == "👥 Участники")
-async def show_event_participants(message: Message, state: FSMContext):
+# 2) Обработка «⬅️ Назад к событию» в любом субсостоянии
+@router.message(F.text == "⬅️ Назад к событию")
+async def cancel_back_to_event(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("Возвращаем к событию …", reply_markup=ReplyKeyboardRemove())
+
     data = await state.get_data()
     event_id = data.get("event_id")
-    if not event_id:
-        await message.answer("⚠️ Событие не выбрано.")
-        return
+    source = data.get("source", "active")
+    page = data.get("page", 0)
 
-    conn = await asyncpg.connect(DATABASE_URL)
+    class FakeCallback:
+        def __init__(self, message, data, from_user):
+            self.message = message
+            self.data = data
+            self.from_user = from_user
+            self.bot = message.bot
 
-    # Список уже подтвердившихся участников
-    participants = await conn.fetch("""
-        SELECT u.username, u.first_name, u.last_name
-        FROM event_participants ep
-        JOIN users u ON ep.user_id = u.id
-        WHERE ep.event_id = $1
-    """, event_id)
+        async def answer(self, *args, **kwargs):
+            return None
 
-    text = "👥 <b>Участники события:</b>\n\n"
-    if participants:
-        text += "\n".join(
-            f"• {r['last_name']} {r['first_name']} (@{r['username']})"
-            if r['username']
-            else f"• {r['last_name']} {r['first_name']}"
-            for r in participants
-        )
+
+    fake = FakeCallback(
+        message=message,
+        data=f"event:{event_id}:{source}:{page}",
+        from_user=message.from_user
+    )
+    await handle_show_event(fake, state)
+
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 3) «📑 По отделам/профилю» → ввод отделов
+@router.message(StateFilter(InvitationStates.CHOOSING_METHOD), F.text == "📑 По отделам/профилю")
+async def invite_by_depts_profiles(message: Message, state: FSMContext):
+    await state.set_state(InvitationStates.ENTER_DEPARTMENTS)
+    # Клавиатура: только «Пропустить»
+    kb = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="Пропустить")]],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+    await message.answer(
+        "Введите отделы через запятую (например: Отдел1, Отдел2) или нажмите «Пропустить»:",
+        reply_markup=kb
+    )
+
+@router.message(StateFilter(InvitationStates.ENTER_DEPARTMENTS))
+async def enter_departments(message: Message, state: FSMContext):
+    text = (message.text or "").strip()
+    # Если пользователь нажал «Пропустить»
+    if text.lower() == "пропустить":
+        await state.update_data(departments=[])
     else:
-        text += "❌ Пока никто не присоединился."
+        depts = [d.strip() for d in text.split(",") if d.strip()]
+        await state.update_data(departments=depts)
 
-    await message.answer(text, parse_mode="HTML")
+    # Переход к вводу профилей
+    await state.set_state(InvitationStates.ENTER_PROFILES)
+    kb = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="Пропустить")]],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+    await message.answer(
+        "Теперь введите профессии (профили) через запятую или нажмите «Пропустить»:",
+        reply_markup=kb
+    )
 
-    # --- Исправленный запрос на «заявки» ---
-    requests = await conn.fetch("""
-        SELECT inv.id AS invitation_id,
-               u.first_name, u.last_name, u.username
-        FROM invitations inv
-        JOIN users u ON u.id = inv.invited_user_id
-        WHERE inv.event_id = $1
-          AND inv.approved_by_author IS NULL
-          AND inv.inviter_user_id IS NULL
-    """, event_id)
 
-    await conn.close()
+@router.message(StateFilter(InvitationStates.ENTER_PROFILES))
+async def enter_profiles(message: Message, state: FSMContext):
+    text = (message.text or "").strip()
 
-    if not requests:
-        return
+    # Если пользователь нажал «Пропустить», сохраняем пустой список профилей
+    if text.lower() == "пропустить":
+        await state.update_data(profiles=[])
+    else:
+        profs = [p.strip() for p in text.split(",") if p.strip()]
+        await state.update_data(profiles=profs)
 
-    await message.answer("<b>Заявки на участие:</b>", parse_mode="HTML")
-    for req in requests:
-        user_text = (
-            f"👤 {req['last_name']} {req['first_name']} (@{req['username']})"
-            if req['username']
-            else f"👤 {req['last_name']} {req['first_name']}"
+    data = await state.get_data()
+    depts = data.get("departments", [])
+    profs = data.get("profiles", [])
+    event_id = data.get("event_id")
+    source = data.get("source", "active")
+    page = data.get("page", 0)
+
+    # Если и отделы, и профили не указаны → сразу возвращаем к событию
+    if not depts and not profs:
+        await state.clear()
+        # Возвращаемся к экрану события через FakeCallback
+        class FakeCallback:
+            def __init__(self, message, data, from_user):
+                self.message = message
+                self.data = data
+                self.from_user = from_user
+                self.bot = message.bot
+
+            async def answer(self, *args, **kwargs):
+                return None
+
+        fake = FakeCallback(
+            message=message,
+            data=f"event:{event_id}:{source}:{page}",
+            from_user=message.from_user
         )
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="✅ Принять",
-                    callback_data=f"approve_request:{req['invitation_id']}"
-                ),
-                InlineKeyboardButton(
-                    text="❌ Отклонить",
-                    callback_data=f"reject_request:{req['invitation_id']}"
-                )
-            ]
-        ])
-        await message.answer(user_text, reply_markup=kb)
-
-
-
-@router.callback_query(F.data.startswith("approve_request:"))
-async def approve_request(callback: CallbackQuery):
-    data = callback.data
-    if not data:
-        await callback.answer("Ошибка: пустые данные.")
+        await handle_show_event(fake, state)
         return
 
-    invitation_id = int(data.split(":")[1])
-    bot = callback.bot
-    assert bot is not None
+    # Иначе — показываем сводку и клавиатуру «✅ Разослать / ❌ Отмена»
+    summary = (
+        f"Будут отправлены приглашения пользователям из отделов:\n"
+        f"{', '.join(depts) if depts else '(не указан)'}\n\n"
+        f"и профессиям:\n{', '.join(profs) if profs else '(не указаны)'}"
+    )
+    await state.set_state(InvitationStates.CONFIRM_DEPTS_PROFS)
+    await message.answer(
+        summary + "\n\nПодтвердить рассылку?",
+        reply_markup=invite_confirm_keyboard()
+    )
 
+
+
+@router.message(StateFilter(InvitationStates.CONFIRM_DEPTS_PROFS), F.text == "✅ Разослать")
+async def send_by_depts_profiles(message: Message, state: FSMContext):
+    data = await state.get_data()
+    depts = data.get("departments", [])
+    profs = data.get("profiles", [])
+    event_id = data.get("event_id")
+    source = data.get("source", "active")
+    page = data.get("page", 0)
+
+    user = message.from_user
+    if user is None:
+        await message.answer("Не удалось определить автора.", reply_markup=ReplyKeyboardRemove())
+        await state.clear()
+        return
+
+    inviter_telegram = user.id
     conn = await asyncpg.connect(DATABASE_URL)
-    row = await conn.fetchrow("""
-        SELECT event_id, invited_user_id, u.telegram_id, e.title
-        FROM invitations i
-        JOIN users u ON u.id = i.invited_user_id
-        JOIN events e ON e.id = i.event_id
-        WHERE i.id = $1
-    """, invitation_id)
-
+    row = await conn.fetchrow(
+        "SELECT id FROM users WHERE telegram_id = $1",
+        inviter_telegram
+    )
     if not row:
         await conn.close()
-        await callback.answer("Заявка не найдена.")
+        await message.answer("Автор события не найден в системе.", reply_markup=ReplyKeyboardRemove())
+        await state.clear()
         return
 
-    await conn.execute("""
-        UPDATE invitations
-        SET approved_by_author = TRUE, is_read = TRUE
-        WHERE id = $1
-    """, invitation_id)
+    inviter_user_id = row["id"]
 
-    await conn.execute("""
-        INSERT INTO event_participants (event_id, user_id)
-        VALUES ($1, $2)
-        ON CONFLICT DO NOTHING
-    """, row['event_id'], row['invited_user_id'])
+    # Если списки пусты — условие `ANY([])` вернёт false, но мы хотим допустить
+    # рассылку «без фильтра по отделам» или «без фильтра по профилям».
+    # Поэтому строим WHERE так, что если списки пусты, эту часть пропускаем:
+    where_clauses = []
+    params = []
+    idx = 1
+
+    if depts:
+        where_clauses.append(f"department = ANY(${idx}::TEXT[])")
+        params.append(depts)
+        idx += 1
+
+    if profs:
+        where_clauses.append(f"position = ANY(${idx}::TEXT[])")
+        params.append(profs)
+        idx += 1
+
+    # Добавляем условие «не автор»
+    where_clauses.append(f"id != ${idx}")
+    params.append(inviter_user_id)
+    idx += 1
+
+    where_sql = " OR ".join(where_clauses) if where_clauses else f"id != ${idx-1}"
+
+    sql = f"SELECT telegram_id FROM users WHERE {where_sql}"
+    rows = await conn.fetch(sql, *params)
+
+    invited = 0
+    bot = message.bot
+    for record in rows:
+        tgid = record.get("telegram_id")
+        if bot is None or tgid is None:
+            continue
+        try:
+            await bot.send_message(
+                chat_id=tgid,
+                text=f"📣 Приглашение на событие (ID {event_id})"
+            )
+            invited += 1
+        except Exception:
+            pass
 
     await conn.close()
 
-    try:
-        await bot.send_message(
-            chat_id=row['telegram_id'],
-            text=f"✅ Ваша заявка на участие в событии \"{row['title']}\" была одобрена!"
-        )
-    except TelegramForbiddenError:
-        pass
+    await message.answer(
+        f"✅ Приглашения отправлены ({invited} чел.).",
+        reply_markup=ReplyKeyboardRemove()
+    )
+
+    # Возвращаем меню события
+    class FakeCallback:
+        def __init__(self, message, data, from_user):
+            self.message = message
+            self.data = data
+            self.from_user = from_user
+            self.bot = message.bot
+
+        async def answer(self, *args, **kwargs):
+            return None
+
+    fake = FakeCallback(
+        message=message,
+        data=f"event:{event_id}:{source}:{page}",
+        from_user=message.from_user
+    )
+
+    await state.clear()
+    await handle_show_event(fake, state)
+
+
+@router.message(StateFilter(InvitationStates.CONFIRM_DEPTS_PROFS), F.text == "❌ Отмена")
+async def cancel_by_depts_profiles(message: Message, state: FSMContext):
+    data = await state.get_data()
+    event_id = data.get("event_id")
+    source = data.get("source", "active")
+    page = data.get("page", 0)
+
+    await message.answer("Рассылка отменена.", reply_markup=ReplyKeyboardRemove())
+
+    class FakeCallback:
+        def __init__(self, message, data, from_user):
+            self.message = message
+            self.data = data
+            self.from_user = from_user
+            self.bot = message.bot
+
+        async def answer(self, *args, **kwargs):
+            return None
+
+    fake = FakeCallback(
+        message=message,
+        data=f"event:{event_id}:{source}:{page}",
+        from_user=message.from_user
+    )
+
+    await state.clear()
+    await handle_show_event(fake, state)
 
 
 
-    if isinstance(callback.message, Message):
-        await callback.message.edit_text("✅ Заявка принята.")
+# 4) «👥 Всем сотрудникам»
+@router.message(StateFilter(InvitationStates.CHOOSING_METHOD), F.text == "👥 Всем сотрудникам")
+async def invite_colleagues(message: Message, state: FSMContext):
+    await state.set_state(InvitationStates.CONFIRM_COLLEAGUES)
+    await message.answer(
+        "Будут отправлены приглашения всем пользователям с тем же \"Местом работы\", что у вас.\nПодтвердить?",
+        reply_markup=invite_confirm_keyboard()
+    )
 
+@router.message(StateFilter(InvitationStates.CONFIRM_COLLEAGUES), F.text == "✅ Разослать")
+async def send_to_colleagues(message: Message, state: FSMContext):
+    data = await state.get_data()
+    event_id = data.get("event_id")
+    source = data.get("source", "active")
+    page = data.get("page", 0)
 
-
-@router.callback_query(F.data.startswith("reject_request:"))
-async def reject_request(callback: CallbackQuery):
-    data = callback.data
-    if not data:
-        await callback.answer("Ошибка: пустые данные.")
+    user = message.from_user
+    if user is None:
+        await message.answer("Не удалось определить автора.", reply_markup=ReplyKeyboardRemove())
+        await state.clear()
         return
 
-    invitation_id = int(data.split(":")[1])
-
+    inviter_telegram = user.id
     conn = await asyncpg.connect(DATABASE_URL)
-    await conn.execute("""
-        UPDATE invitations
-        SET approved_by_author = FALSE, is_read = TRUE
-        WHERE id = $1
-    """, invitation_id)
+    row = await conn.fetchrow(
+        "SELECT id, place_of_work FROM users WHERE telegram_id = $1",
+        inviter_telegram
+    )
+    if not row:
+        await conn.close()
+        await message.answer("Автор события не найден.", reply_markup=ReplyKeyboardRemove())
+        await state.clear()
+        return
+
+    inviter_user_id = row["id"]
+    place = row.get("place_of_work")
+    if place is None:
+        await conn.close()
+        await message.answer("У автора не заполнено «Место работы».", reply_markup=ReplyKeyboardRemove())
+        await state.clear()
+        return
+
+    rows = await conn.fetch(
+        "SELECT telegram_id FROM users WHERE place_of_work = $1 AND id != $2",
+        place, inviter_user_id
+    )
+
+    invited = 0
+    bot = message.bot
+    for record in rows:
+        tgid = record.get("telegram_id")
+        if bot is None or tgid is None:
+            continue
+        try:
+            await bot.send_message(
+                chat_id=tgid,
+                text=f"📣 Приглашение на событие (ID {event_id})"
+            )
+            invited += 1
+        except Exception:
+            pass
+
     await conn.close()
 
-    if isinstance(callback.message, Message):
-       await callback.message.edit_text("❌ Заявка отклонена.")
+    await message.answer(
+        f"✅ Приглашения отправлены коллегам ({invited} чел.).",
+        reply_markup=ReplyKeyboardRemove()
+    )
+
+    class FakeCallback:
+        def __init__(self, message, data, from_user):
+            self.message = message
+            self.data = data
+            self.from_user = from_user
+            self.bot = message.bot
+
+        async def answer(self, *args, **kwargs):
+            return None
+
+
+    fake = FakeCallback(
+        message=message,
+        data=f"event:{event_id}:{source}:{page}",
+        from_user=message.from_user
+    )
+
+    await state.clear()
+    await handle_show_event(fake, state)
+
+
+@router.message(StateFilter(InvitationStates.CONFIRM_COLLEAGUES), F.text == "❌ Отмена")
+async def cancel_colleagues(message: Message, state: FSMContext):
+    data = await state.get_data()
+    event_id = data.get("event_id")
+    source = data.get("source", "active")
+    page = data.get("page", 0)
+
+    await message.answer("Рассылка отменена.", reply_markup=ReplyKeyboardRemove())
+
+    class FakeCallback:
+        def __init__(self, message, data, from_user):
+            self.message = message
+            self.data = data
+            self.from_user = from_user
+            self.bot = message.bot
+
+        async def answer(self, *args, **kwargs):
+            return None
+
+
+    fake = FakeCallback(
+        message=message,
+        data=f"event:{event_id}:{source}:{page}",
+        from_user=message.from_user
+    )
+
+    await state.clear()
+    await handle_show_event(fake, state)
+
+
+
+# 5) «🌐 Всем»
+@router.message(StateFilter(InvitationStates.CHOOSING_METHOD), F.text == "🌐 Всем")
+async def invite_all_opt_in(message: Message, state: FSMContext):
+    await state.set_state(InvitationStates.CONFIRM_ALL)
+    await message.answer(
+        "Будут отправлены приглашения всем пользователям, у кого «Открыт к предложениям» = True.\nПодтвердить?",
+        reply_markup=invite_confirm_keyboard()
+    )
+
+@router.message(StateFilter(InvitationStates.CONFIRM_ALL), F.text == "✅ Разослать")
+async def send_to_all(message: Message, state: FSMContext):
+    data = await state.get_data()
+    event_id = data.get("event_id")
+    source = data.get("source", "active")
+    page = data.get("page", 0)
+
+    user = message.from_user
+    if user is None:
+        await message.answer("Не удалось определить автора.", reply_markup=ReplyKeyboardRemove())
+        await state.clear()
+        return
+
+    inviter_telegram = user.id
+    conn = await asyncpg.connect(DATABASE_URL)
+    row = await conn.fetchrow(
+        "SELECT id FROM users WHERE telegram_id = $1",
+        inviter_telegram
+    )
+    if not row:
+        await conn.close()
+        await message.answer("Автор события не найден.", reply_markup=ReplyKeyboardRemove())
+        await state.clear()
+        return
+
+    inviter_id = row["id"]
+    rows = await conn.fetch(
+        "SELECT telegram_id FROM users WHERE open_to_offers = TRUE AND id != $1",
+        inviter_id
+    )
+
+    invited = 0
+    bot = message.bot
+    for record in rows:
+        tgid = record.get("telegram_id")
+        if bot is None or tgid is None:
+            continue
+        try:
+            await bot.send_message(
+                chat_id=tgid,
+                text=f"📣 Приглашение на событие (ID {event_id})"
+            )
+            invited += 1
+        except Exception:
+            pass
+
+    await conn.close()
+
+    await message.answer(
+        f"✅ Приглашения отправлены ({invited} чел.).",
+        reply_markup=ReplyKeyboardRemove()
+    )
+
+    class FakeCallback:
+        def __init__(self, message, data, from_user):
+            self.message = message
+            self.data = data
+            self.from_user = from_user
+            self.bot = message.bot
+
+        async def answer(self, *args, **kwargs):
+            return None
+
+
+    fake = FakeCallback(
+        message=message,
+        data=f"event:{event_id}:{source}:{page}",
+        from_user=message.from_user
+    )
+
+    await state.clear()
+    await handle_show_event(fake, state)
+
+
+@router.message(StateFilter(InvitationStates.CONFIRM_ALL), F.text == "❌ Отмена")
+async def cancel_send_all(message: Message, state: FSMContext):
+    data = await state.get_data()
+    event_id = data.get("event_id")
+    source = data.get("source", "active")
+    page = data.get("page", 0)
+
+    await message.answer("Рассылка отменена.", reply_markup=ReplyKeyboardRemove())
+
+    class FakeCallback:
+        def __init__(self, message, data, from_user):
+            self.message = message
+            self.data = data
+            self.from_user = from_user
+            self.bot = message.bot
+
+        async def answer(self, *args, **kwargs):
+            return None
+
+
+    fake = FakeCallback(
+        message=message,
+        data=f"event:{event_id}:{source}:{page}",
+        from_user=message.from_user
+    )
+
+    await state.clear()
+    await handle_show_event(fake, state)

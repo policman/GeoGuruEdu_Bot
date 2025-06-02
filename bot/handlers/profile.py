@@ -1,14 +1,23 @@
 from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 import asyncpg
 
-from bot.database.user_repo import get_user_by_telegram_id, update_user_field
+from bot.database.user_repo import (
+    get_user_by_telegram_id,
+    update_user_field,
+    update_user_fields
+)
 from bot.config import DATABASE_URL
+from bot.keyboards.menu import section_menu_keyboard
 
 router = Router()
 
+
+# ======================
+# 1) Старая часть: редактирование через «👤 Профиль»
+# ======================
 class EditProfile(StatesGroup):
     editing_field = State()
 
@@ -22,7 +31,6 @@ def profile_edit_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Отдел", callback_data="edit_profile:department")]
     ])
 
-# 🧾 Показать профиль
 @router.message(F.text == "👤 Профиль")
 async def show_profile(message: Message, state: FSMContext):
     if not message.from_user:
@@ -31,7 +39,6 @@ async def show_profile(message: Message, state: FSMContext):
 
     conn = await asyncpg.connect(DATABASE_URL)
     user = await get_user_by_telegram_id(conn, message.from_user.id)
-    print(f"Текущий user_id: {user}")
     await conn.close()
 
     if not user:
@@ -51,7 +58,6 @@ async def show_profile(message: Message, state: FSMContext):
 
     await message.answer(profile_text, parse_mode="HTML", reply_markup=profile_edit_keyboard())
 
-# 🖊 Обработка нажатия на кнопку
 @router.callback_query(F.data.startswith("edit_profile:"))
 async def handle_edit_profile(callback: CallbackQuery, state: FSMContext, bot: Bot):
     if not callback.from_user or not callback.data:
@@ -64,7 +70,6 @@ async def handle_edit_profile(callback: CallbackQuery, state: FSMContext, bot: B
         return
 
     field = parts[1]
-
     prompts = {
         "last_name": "Введите новую фамилию:",
         "first_name": "Введите новое имя:",
@@ -76,11 +81,9 @@ async def handle_edit_profile(callback: CallbackQuery, state: FSMContext, bot: B
 
     await state.set_state(EditProfile.editing_field)
     await state.update_data(field=field)
-
     await bot.send_message(callback.from_user.id, prompts[field])
     await callback.answer()
 
-# 💾 Сохранение изменений
 @router.message(EditProfile.editing_field)
 async def save_profile_field(message: Message, state: FSMContext):
     if not message.from_user:
@@ -95,7 +98,6 @@ async def save_profile_field(message: Message, state: FSMContext):
         return
 
     value = (message.text or "").strip()
-
     if field == "experience":
         try:
             value = int(value)
@@ -123,3 +125,42 @@ async def save_profile_field(message: Message, state: FSMContext):
         await message.answer(profile_text, parse_mode="HTML", reply_markup=profile_edit_keyboard())
     else:
         await message.answer("⚠️ Пользователь не найден.")
+
+
+# ======================
+# 2) Новая часть: первичное заполнение «должность» + «отдел» после /start
+# ======================
+class FillProfile(StatesGroup):
+    POSITION = State()
+    DEPARTMENT = State()
+
+@router.message(FillProfile.POSITION)
+async def fill_position(message: Message, state: FSMContext):
+    text = (message.text or "").strip()
+    await state.update_data(position=text)
+
+    # При переходе на ввод отдела снова убираем любую клавиатуру
+    await state.set_state(FillProfile.DEPARTMENT)
+    await message.answer("Спасибо! Теперь введите ваш отдел:", reply_markup=ReplyKeyboardRemove())
+
+@router.message(FillProfile.DEPARTMENT)
+async def fill_department(message: Message, state: FSMContext):
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    position = data.get("position")
+    department = text
+
+    user = message.from_user
+    if user is None:
+        await message.answer("❌ Не удалось определить пользователя.")
+        await state.clear()
+        return
+
+    conn = await asyncpg.connect(DATABASE_URL)
+    # Обновляем сразу оба поля: position и department
+    await update_user_fields(conn, user.id, position=position, department=department)
+    await conn.close()
+
+    await state.clear()
+    # После обновления выводим главное меню
+    await message.answer("✅ Ваш профиль обновлён.", reply_markup=section_menu_keyboard)
