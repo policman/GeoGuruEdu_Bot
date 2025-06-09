@@ -1,10 +1,31 @@
-from aiogram import types
-from bot.keyboards.learning import learning_menu_keyboard
+# bot/handlers/learning/menu.py
 
-async def learning_entry(message: types.Message):
-    text = (
-        #"📘 <b>Курсы</b> — интерактивные обучающие модули по ключевым технологиям МСК\n\n"
-        "🧪 <b>Тестирование</b> — проверка знаний после прохождения тем\n\n"
-        "🔍 <b>Поиск материалов</b> — найдите научные публикации по интересующим темам через Semantic Scholar"
+from aiogram import Router
+from aiogram.types import Message
+
+# Импортируем функции, возвращающие клавиатуры
+from bot.keyboards.learning.learning import learning_menu_keyboard
+from bot.keyboards.learning.menu import testing_menu_keyboard
+
+router = Router()
+
+@router.message(lambda m: m.text == "📚 Обучение")
+async def enter_learning_section(message: Message):
+    await message.answer(
+        "📘 Выберите раздел обучения:",
+        reply_markup=learning_menu_keyboard()  # <-- вызываем функцию
     )
-    await message.answer(text, parse_mode="HTML", reply_markup=learning_menu_keyboard)
+
+@router.message(lambda m: m.text == "Тестирование")
+async def enter_testing_section(message: Message):
+    await message.answer(
+        "Меню тестирования:",
+        reply_markup=testing_menu_keyboard()  # <-- вызываем функцию
+    )
+
+@router.message(lambda m: m.text == "⬅️ Вернуться")
+async def back_to_learning(message: Message):
+    await message.answer(
+        "📘 Выберите раздел обучения:",
+        reply_markup=learning_menu_keyboard()  # <-- снова вызываем функцию
+    )

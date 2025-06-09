@@ -106,3 +106,20 @@ def answers_list_inline(answers: list, limit: int, offset: int, event_id: int, p
         kb.inline_keyboard.append(nav)
 
     return kb
+
+def author_participants_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Reply-клавиатура, появляющаяся после нажатия «Участники» автором:
+    [Вопросы участников]  — открыть список вопросов, нуждающихся в ответе
+    [Список участников]  — статистика по отделам/профилям
+    [⬅️ К событию]       — вернуться к просмотру события
+    """
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Вопросы участников")],
+            [KeyboardButton(text="Список участников")],
+            [KeyboardButton(text="⬅️ К событию")]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )

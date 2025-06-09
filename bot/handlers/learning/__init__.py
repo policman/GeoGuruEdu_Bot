@@ -1,2 +1,6 @@
-from .registration import router as learning_router
-__all__ = ["learning_router"]
+from aiogram import Router
+from .registration import router as registration_router
+
+
+learning_router = Router()
+learning_router.include_router(registration_router)

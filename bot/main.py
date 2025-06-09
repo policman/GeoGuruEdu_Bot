@@ -18,37 +18,28 @@ async def main():
     load_dotenv()
     BOT_TOKEN = os.getenv("BOT_TOKEN")
     if not BOT_TOKEN:
-        raise ValueError("BOT_TOKEN не установлен в переменных окружения")
+        raise ValueError("BOT_TOKEN не установлен в переменных окружении")
 
-    bot = Bot(
-        token=BOT_TOKEN,
-        parse_mode=ParseMode.HTML
-    )
-
+    bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
 
-    from bot.handlers import start
-    from bot.handlers import profile
-    from bot.handlers.events import router as events_router
-    from bot.handlers.learning.ai import ai_chat_router
+    # ───── Импортируем основные роутеры ─────
+    from bot.handlers.start import router as start_router
+    from bot.handlers.profile import router as profile_router
+    from bot.handlers.events.chat import router as events_chat_router
+
+    # ───── Единственный «Learning»-роутер ─────
     from bot.handlers.learning import learning_router
-    from bot.handlers.learning.materials.favorites import router as favorites_router
-    from bot.handlers.learning.materials.pagination import router as pagination_router
-    from bot.handlers.events.chat import router as chat_router
-
-    #from bot.handlers.events.invite_event import router as invite_router
-
-
-    dp.include_router(events_router)
-    dp.include_router(start.router)
-    dp.include_router(profile.router)
-    dp.include_router(ai_chat_router)
     dp.include_router(learning_router)
-    dp.include_router(pagination_router)
-    dp.include_router(favorites_router)
-    dp.include_router(chat_router)
-    #dp.include_router(invite_router)
+
+    from bot.handlers.events.registration import router as events_router
+    dp.include_router(events_router)
+
+    # ───── Подключаем каждый роутер ровно один раз ─────
+    dp.include_router(start_router)
+    dp.include_router(profile_router)
+    dp.include_router(events_chat_router)
 
     await set_default_commands(bot)
     await run_migrations_main()

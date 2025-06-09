@@ -19,14 +19,26 @@ class EventCreation(StatesGroup):
         confirmation,
     )
 
-class EventView(StatesGroup):
-    choosing_category = State()
-    viewing_events = State()
-    back_to_my_events = State()
-    writing_to_organizer = State()   # участник пишет сообщение организатору
-    viewing_answers      = State()   # участник просматривает ответы организатора
-    paging_answers       = State()   # состояние для навигации по списку ответов
+# class EventView(StatesGroup):
+    
+#     viewing_events = State()
+    
+#     writing_to_organizer = State()   # участник пишет сообщение организатору
+#     viewing_answers      = State()   # участник просматривает ответы организатора
+#     paging_answers       = State()   # состояние для навигации по списку ответов
 
+class EventView(StatesGroup):
+    viewing_participants_menu = State()   # <- добавлено
+    viewing_events = State()
+    writing_to_organizer = State()
+    paging_answers = State()
+    viewing_answers = State()
+    paging_questions = State()
+    viewing_questions = State()
+    viewing_question = State()
+    answering_question = State()
+    back_to_my_events = State()
+    choosing_category = State()
 
 class EventEdit(StatesGroup):
     choosing_field = State()
