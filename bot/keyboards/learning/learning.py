@@ -1,10 +1,19 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-learning_menu_keyboard = ReplyKeyboardMarkup(
-    keyboard=[
-        #[KeyboardButton(text="🧠 ИИ чат"), 
-        [KeyboardButton(text="🧪 Тестирование"), KeyboardButton(text="🔍 Поиск материалов")],
-        [KeyboardButton(text="⬅️ Главное меню")]
-    ],
-    resize_keyboard=True
-)
+def learning_menu_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Показывает две кнопки: 🧪 Тестирование  и  🔍 Поиск материалов,
+    а также «⬅️ Главное меню», если нужно вернуться назад в главное меню всего бота.
+    """
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(text="Тестирование"),
+                KeyboardButton(text="🔍 Поиск материалов")
+            ],
+            [
+                KeyboardButton(text="⬅️ Главное меню")
+            ]
+        ],
+        resize_keyboard=True
+    )

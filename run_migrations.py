@@ -31,7 +31,6 @@ migrations_table = Table(
 )
 
 
-migrations_table.tometadata(metadata)
 engine = create_engine(DATABASE_URL)
 from bot.database.migrations.invitations import invitations
 invitations.tometadata(metadata)
