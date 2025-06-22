@@ -158,62 +158,87 @@ async def process_answer(callback: CallbackQuery, state: FSMContext):
         return
 
     q = questions[idx]
-    # Найдём в q["options"] ту, которая соответствует chosen_option_id
     selected = next((o for o in q["options"] if o["id"] == chosen_option_id), None)
     is_correct = selected["is_correct"] if selected else False
 
-    # Увеличиваем счётчик, если угадали
-    if is_correct:
-        new_correct = data.get("correct_count", 0) + 1
-        await state.update_data(correct_count=new_correct)
-
-    # Перейдём к следующему вопросу
+    # Если это последний вопрос — обрабатываем отдельно
     next_idx = idx + 1
     total = len(questions)
-
     msg = callback.message
     if not isinstance(msg, Message):
         return
 
     if next_idx < total:
-        # Убираем клавиатуру предыдущего сообщения
+        # Убираем inline-клавиатуру с предыдущего сообщения
         try:
             await msg.edit_reply_markup(reply_markup=None)
         except:
             pass
 
+        # Ответ пользователю
+        await msg.answer("✅ Правильно!" if is_correct else "❌ Неправильно.")
+
+        if is_correct:
+            new_correct = data.get("correct_count", 0) + 1
+            await state.update_data(correct_count=new_correct)
+
         await state.update_data(current_index=next_idx)
         await ask_question(msg, state)
         return
 
-    # Все вопросы пройдены — показываем результат
+    # --- Последний вопрос ---
+    # Убираем inline-клавиатуру
+    try:
+        await msg.edit_reply_markup(reply_markup=None)
+    except:
+        pass
+
+    # Вердикт
+    await msg.answer("✅ Правильно!" if is_correct else "❌ Неправильно.")
+
+    # Учитываем правильный ответ, если был
+    if is_correct:
+        new_correct = data.get("correct_count", 0) + 1
+        await state.update_data(correct_count=new_correct)
+
+    # Обновляем данные
+    data = await state.get_data()
     correct = data.get("correct_count", 0)
     total_q = total
 
-    # Сохраняем результат в БД
+    # Сохраняем результат
     conn = await asyncpg.connect(DATABASE_URL)
-    user_row = await conn.fetchrow(
-        "SELECT id FROM users WHERE telegram_id = $1",
-        callback.from_user.id
-    )
+    user_row = await conn.fetchrow("SELECT id FROM users WHERE telegram_id = $1", callback.from_user.id)
     if user_row:
         user_id = user_row["id"]
         svc = TestService(conn)
         await svc.save_test_result(user_id, data["taking_test_id"], correct, total_q)
     await conn.close()
 
-    # Очищаем клавиатуру последнего вопроса и выводим итог
-    try:
-        await msg.edit_reply_markup(reply_markup=None)
-    except:
-        pass
+    # Рассчитываем прогресс
+    percent = int((correct / total_q) * 100) if total_q else 0
+    def get_progress_bar(pct: int) -> str:
+        return f"{'🟩' * (pct // 10)}{'⬜️' * (10 - (pct // 10))}"
+    progress_bar = get_progress_bar(percent)
+
+    # Отзыв
+    if percent == 100:
+        feedback = "🎉 Отлично! Вы ответили правильно на все вопросы!"
+    elif percent >= 80:
+        feedback = "💪 Отличный результат!"
+    elif percent >= 50:
+        feedback = "👍 Неплохо, но можно лучше."
+    else:
+        feedback = "📘 Попробуйте ещё раз, вы сможете лучше!"
 
     await msg.answer(
-        f"🏁 Тест завершён!\n"
-        f"Ваш результат: <b>{correct} из {total_q}</b>.\n"
-        f"Спасибо за прохождение!",
+        f"🏁 <b>Тест завершён!</b>\n"
+        f"{progress_bar}  <b>{percent}%</b>\n"
+        f"Результат: <b>{correct} из {total_q}</b>\n\n"
+        f"{feedback}",
         parse_mode="HTML"
     )
 
     await state.clear()
+
 

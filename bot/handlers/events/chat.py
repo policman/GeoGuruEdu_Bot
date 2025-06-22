@@ -273,13 +273,13 @@ async def author_show_participant_stats(message: Message, state: FSMContext):
     # Отделы
     text_lines.append("📊 Участники по отделам:")
     for dept, cnt in stats["departments"].items():
-        text_lines.append(f"{dept} — {cnt} чел")
+        text_lines.append(f"{dept} — {cnt} чел.")
     # Если словарь professions пустой, просто не добавляем эту секцию
     if stats["professions"]:
         text_lines.append("")  # пустая строка
         text_lines.append("📋 Участники по профилям:")
         for prof, cnt in stats["professions"].items():
-            text_lines.append(f"{prof} — {cnt} чел")
+            text_lines.append(f"{prof} — {cnt} чел.")
 
 
     text = "\n".join(text_lines)
@@ -431,7 +431,7 @@ async def page_questions(callback: CallbackQuery, state: FSMContext):
     await state.set_state(EventView.paging_questions)
 
 
-@router.callback_query(StateFilter(EventView.viewing_events), lambda c: c.data and c.data.startswith("view_question:"))
+@router.callback_query(StateFilter(EventView.viewing_events, EventView.paging_questions), lambda c: c.data and c.data.startswith("view_question:"))
 async def view_single_question(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     #  ↓ сразу “сужаем” тип:
@@ -528,7 +528,7 @@ async def save_answer_from_organizer(message: Message, state: FSMContext):
     )
     await conn.close()
 
-    await message.answer("✅ Ответ отправлен участнику.", reply_markup=ReplyKeyboardRemove())
+    await message.answer("✅ Ответ отправлен участнику.", reply_markup=author_participants_keyboard())
 
     # Возвращаемся к списку «Вопросов участников»
     data = await state.get_data()

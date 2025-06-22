@@ -24,7 +24,6 @@ async def show_more_results(callback: CallbackQuery, state: FSMContext):
         return
     msg = cast(Message, callback.message)
 
-    # Удаляем старую панель навигации
     await msg.delete()
 
     if not callback.data:
@@ -70,15 +69,13 @@ async def show_more_results(callback: CallbackQuery, state: FSMContext):
         year = item.get("publication_year", "")
         url = item.get("primary_location", {}).get("landing_page_url") or item.get("id", "")
 
-        number = (page - 1) * ITEMS_PER_PAGE + i + 1
         text = (
-            f"<b>{number}. {display_title}</b>\n"
+            f"<b> {display_title}</b>\n"
             f"👤 {authors}\n"
             f"📅 {year}\n\n"
             f"🔗 <a href='{url}'>Ссылка</a>"
         )
         await msg.answer(text, parse_mode="HTML", reply_markup=favorite_button(i))
 
-    # Новая панель навигации
     await msg.answer("Навигация:", reply_markup=search_navigation_keyboard(source, page + 1))
     await callback.answer()
