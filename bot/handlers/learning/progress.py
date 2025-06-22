@@ -30,6 +30,12 @@ async def show_test_progress(message: Message, state: FSMContext):
     test_results = await conn.fetch("""
         SELECT t.title, tr.correct_answers, tr.total_questions, tr.taken_at
         FROM test_results tr
+        JOIN (
+            SELECT test_id, MAX(taken_at) AS latest
+            FROM test_results
+            WHERE user_id = $1
+            GROUP BY test_id
+        ) latest_attempts ON tr.test_id = latest_attempts.test_id AND tr.taken_at = latest_attempts.latest
         JOIN tests t ON tr.test_id = t.id
         WHERE tr.user_id = $1
         ORDER BY tr.taken_at DESC
@@ -66,7 +72,7 @@ async def show_test_progress(message: Message, state: FSMContext):
     lines = ["📊 <b>Ваш прогресс:</b>\n"]
 
     if test_results:
-        lines.append("🧪 <b>Тесты:</b>")
+        lines.append("🧪 <b>Тесты (последняя попытка):</b>")
         for r in test_results:
             date_str = r["taken_at"].strftime("%d.%m.%Y %H:%M")
             score = f"{r['correct_answers']} из {r['total_questions']}"

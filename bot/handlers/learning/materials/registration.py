@@ -24,10 +24,10 @@ async def entry_point(message: Message, state):
 
 # from aiogram.filters import StateFilter
 
-@router.message(StateFilter(MaterialSearch.waiting_for_query), lambda m: m.text == "❌ Закончить поиск")
+@router.message(StateFilter(MaterialSearch.waiting_for_query, MaterialSearch.browsing_results), lambda m: m.text == "❌ Закончить поиск")
 async def exit_material_search(message: Message, state: FSMContext):
+    print("Закончить кнопка нажата")
     await state.clear()
-    # Здесь ваша кнопка главного меню, например:
     from bot.keyboards.menu import section_menu_keyboard
     await message.answer("Поиск завершён.", reply_markup=section_menu_keyboard)
 

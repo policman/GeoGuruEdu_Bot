@@ -251,4 +251,40 @@ INSERT INTO options (question_id, text, is_correct) VALUES
 
 
 
-DELETE FROM participant_messages;
+-- Очистка таблиц
+DELETE FROM invitations;
+DELETE FROM event_participants;
+DELETE FROM events;
+
+
+
+-- Вставка событий
+INSERT INTO events (author_id, creator_id, title, description, start_date, end_date, organizers, price, photo, is_draft, created_at) VALUES
+(1, NULL, 'Геологоразведка в Арктике', 'Семинар о современных методах разведки полезных ископаемых в условиях Севера.', '2025-07-10', '2025-07-12', 'ГеоГуру Центр', 0, 'AgACAgIAAxkBAAI4jGhGIgImdapRqyDumMAd6zKLcpQYAAJj-DEb9-cwStggCJRb8sGfAQADAgADeAADNgQ', FALSE, NOW()),
+(1, NULL, 'Минералогия для начинающих', 'Обзорное мероприятие по минералогии и классификации пород.', '2025-07-20', '2025-07-21', 'ГеоГуру Центр', 0, 'AgACAgIAAxkBAAI4jGhGIgImdapRqyDumMAd6zKLcpQYAAJj-DEb9-cwStggCJRb8sGfAQADAgADeAADNgQ', FALSE, NOW()),
+(1, NULL, 'Весенний геофорум', 'Обсуждение инноваций в отрасли и развитие компетенций персонала.', '2025-03-15', '2025-03-16', 'ГеоГуру Центр', 0, 'AgACAgIAAxkBAAI4jGhGIgImdapRqyDumMAd6zKLcpQYAAJj-DEb9-cwStggCJRb8sGfAQADAgADeAADNgQ', FALSE, NOW()),
+
+(2, NULL, 'Анализ геоданных', 'Практический семинар по обработке и визуализации геоданных.', '2025-07-05', '2025-07-06', 'Центр геоинформатики', 0, 'AgACAgIAAxkBAAI4jGhGIgImdapRqyDumMAd6zKLcpQYAAJj-DEb9-cwStggCJRb8sGfAQADAgADeAADNgQ', FALSE, NOW()),
+(2, NULL, 'Экспедиционная подготовка', 'Подготовка к работе в полевых условиях: безопасность и снаряжение.', '2025-07-18', '2025-07-19', 'Центр геоинформатики', 0, 'AgACAgIAAxkBAAI4jGhGIgImdapRqyDumMAd6zKLcpQYAAJj-DEb9-cwStggCJRb8sGfAQADAgADeAADNgQ', FALSE, NOW()),
+(2, NULL, 'Весенний отчёт по экспедициям', 'Подведение итогов экспедиций первой половины 2025 года.', '2025-03-22', '2025-03-23', 'Центр геоинформатики', 0, 'AgACAgIAAxkBAAI4jGhGIgImdapRqyDumMAd6zKLcpQYAAJj-DEb9-cwStggCJRb8sGfAQADAgADeAADNgQ', FALSE, NOW()),
+
+(3, NULL, 'Технологии бурения', 'Интенсив по современным технологиям бурения на глубину.', '2025-07-08', '2025-07-09', 'Школа бурения', 0, 'AgACAgIAAxkBAAI4jGhGIgImdapRqyDumMAd6zKLcpQYAAJj-DEb9-cwStggCJRb8sGfAQADAgADeAADNgQ', FALSE, NOW()),
+(3, NULL, 'Применение ГИС', 'Курс по работе с геоинформационными системами в горнодобывающей промышленности.', '2025-07-25', '2025-07-26', 'Школа бурения', 0, 'AgACAgIAAxkBAAI4jGhGIgImdapRqyDumMAd6zKLcpQYAAJj-DEb9-cwStggCJRb8sGfAQADAgADeAADNgQ', FALSE, NOW()),
+(3, NULL, 'Весеннее совещание по технике', 'Техническое совещание с представителями производственных отделов.', '2025-03-10', '2025-03-11', 'Школа бурения', 0, 'AgACAgIAAxkBAAI4jGhGIgImdapRqyDumMAd6zKLcpQYAAJj-DEb9-cwStggCJRb8sGfAQADAgADeAADNgQ', FALSE, NOW()),
+
+(4, NULL, 'Экология и недропользование', 'Экологические аспекты добычи полезных ископаемых.', '2025-07-12', '2025-07-13', 'Эко-центр', 0, 'AgACAgIAAxkBAAI4jGhGIgImdapRqyDumMAd6zKLcpQYAAJj-DEb9-cwStggCJRb8sGfAQADAgADeAADNgQ', FALSE, NOW()),
+(4, NULL, 'Ответственное недропользование', 'Вопросы устойчивого развития в горной промышленности.', '2025-07-29', '2025-07-30', 'Эко-центр', 0, 'AgACAgIAAxkBAAI4jGhGIgImdapRqyDumMAd6zKLcpQYAAJj-DEb9-cwStggCJRb8sGfAQADAgADeAADNgQ', FALSE, NOW()),
+(4, NULL, 'Весенний форум устойчивости', 'Форум для обсуждения практик ESG и экобезопасности.', '2025-03-18', '2025-03-19', 'Эко-центр', 0, 'AgACAgIAAxkBAAI4jGhGIgImdapRqyDumMAd6zKLcpQYAAJj-DEb9-cwStggCJRb8sGfAQADAgADeAADNgQ', FALSE, NOW());
+
+
+
+UPDATE events SET organizers = 'Геннадий Самойлов' WHERE author_id = 1;
+UPDATE events SET organizers = 'Даниил Лезгинцев' WHERE author_id = 2;
+UPDATE events SET organizers = 'Николай Веселов' WHERE author_id = 3;
+UPDATE events SET organizers = 'Тимур Хузяхметов' WHERE author_id = 4;
+
+
+UPDATE users SET department = 'HR' WHERE id > 3
+
+
+UPDATE users SET position = 'HR-специалист' WHERE id > 3
