@@ -207,25 +207,29 @@ async def send_by_depts_profiles(message: Message, state: FSMContext):
     params.append(inviter_user_id)
     idx += 1
 
-    where_sql = " OR ".join(where_clauses) if where_clauses else f"id != ${idx-1}"
+    where_sql = " AND ".join(where_clauses) if where_clauses else f"id != ${idx-1}"
 
     sql = f"SELECT telegram_id FROM users WHERE {where_sql}"
     rows = await conn.fetch(sql, *params)
 
     invited = 0
-    bot = message.bot
+    now = datetime.now()
     for record in rows:
         tgid = record.get("telegram_id")
-        if bot is None or tgid is None:
+        user_row = await conn.fetchrow("SELECT id FROM users WHERE telegram_id = $1", tgid)
+        if not user_row:
             continue
-        try:
-            await bot.send_message(
-                chat_id=tgid,
-                text=f"📣 Приглашение на событие (ID {event_id})"
-            )
-            invited += 1
-        except Exception:
-            pass
+        invited_user_id = user_row["id"]
+        await conn.execute(
+            """
+            INSERT INTO invitations (event_id, invited_user_id, inviter_user_id, created_at)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT DO NOTHING
+            """,
+            event_id, invited_user_id, inviter_user_id, now
+        )
+        invited += 1
+
 
     await conn.close()
 
@@ -333,19 +337,23 @@ async def send_to_colleagues(message: Message, state: FSMContext):
     )
 
     invited = 0
-    bot = message.bot
+    now = datetime.now()
     for record in rows:
         tgid = record.get("telegram_id")
-        if bot is None or tgid is None:
+        user_row = await conn.fetchrow("SELECT id FROM users WHERE telegram_id = $1", tgid)
+        if not user_row:
             continue
-        try:
-            await bot.send_message(
-                chat_id=tgid,
-                text=f"📣 Приглашение на событие (ID {event_id})"
-            )
-            invited += 1
-        except Exception:
-            pass
+        invited_user_id = user_row["id"]
+        await conn.execute(
+            """
+            INSERT INTO invitations (event_id, invited_user_id, inviter_user_id, created_at)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT DO NOTHING
+            """,
+            event_id, invited_user_id, inviter_user_id, now
+        )
+        invited += 1
+
 
     await conn.close()
 
@@ -447,19 +455,23 @@ async def send_to_all(message: Message, state: FSMContext):
     )
 
     invited = 0
-    bot = message.bot
+    now = datetime.now()
     for record in rows:
         tgid = record.get("telegram_id")
-        if bot is None or tgid is None:
+        user_row = await conn.fetchrow("SELECT id FROM users WHERE telegram_id = $1", tgid)
+        if not user_row:
             continue
-        try:
-            await bot.send_message(
-                chat_id=tgid,
-                text=f"📣 Приглашение на событие (ID {event_id})"
-            )
-            invited += 1
-        except Exception:
-            pass
+        invited_user_id = user_row["id"]
+        await conn.execute(
+            """
+            INSERT INTO invitations (event_id, invited_user_id, inviter_user_id, created_at)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT DO NOTHING
+            """,
+            event_id, invited_user_id, inviter_id, now
+        )
+        invited += 1
+
 
     await conn.close()
 

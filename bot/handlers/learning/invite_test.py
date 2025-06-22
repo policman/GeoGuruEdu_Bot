@@ -6,7 +6,8 @@ from bot.config import DATABASE_URL
 from bot.services.test_service import TestService
 from bot.database.user_repo import get_user_by_telegram_id
 from bot.keyboards.learning.menu import testing_menu_keyboard
-
+from bot.handlers.learning.take_test import start_selected_test
+from bot.states.test_states import TestTaking
 router = Router()
 
 @router.message(F.text == "Пригласить в тест")
@@ -256,13 +257,18 @@ async def show_test_invitations(message: Message, state: FSMContext):
 @router.callback_query(F.data.startswith("accept_inv:"))
 async def accept_invitation(callback: CallbackQuery, state: FSMContext):
     _, invitation_id, test_id = callback.data.split(":")
+    test_id = int(test_id)
 
     conn = await asyncpg.connect(DATABASE_URL)
     await conn.execute("UPDATE test_invitations SET accepted = TRUE WHERE id = $1", int(invitation_id))
     await conn.close()
 
     await callback.message.edit_reply_markup()
-    await callback.message.answer("✅ Приглашение принято. Вы можете пройти тест в разделе 'Пройти тест'.")
+    await callback.message.answer("✅ Приглашение принято. Тест начинается...")
+
+    # Устанавливаем test_id во state и нужное состояние
+    await state.set_state(TestTaking.waiting_for_start)
+    await start_selected_test(callback=callback, state=state, test_id=test_id)
 
 
 @router.callback_query(F.data.startswith("decline_inv:"))

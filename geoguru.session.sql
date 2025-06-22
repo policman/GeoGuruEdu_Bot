@@ -288,3 +288,6 @@ UPDATE users SET department = 'HR' WHERE id > 3
 
 
 UPDATE users SET position = 'HR-специалист' WHERE id > 3
+
+
+SELECT pg_get_serial_sequence('questions', 'id');
