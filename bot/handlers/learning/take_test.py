@@ -60,24 +60,28 @@ async def show_tests_list(message: Message, state: FSMContext):
 
 
 @router.callback_query(TestTaking.waiting_for_start, lambda c: c.data and c.data.startswith("start_test:"))
-async def start_selected_test(callback: CallbackQuery, state: FSMContext):
+async def start_selected_test(callback: CallbackQuery, state: FSMContext, test_id: int | None = None):
     await callback.answer()
-    if callback.data is None:
-        return
-    parts = callback.data.split(":")
-    test_id = int(parts[1])
+
+    # Если test_id не передан явно — получаем его из callback.data
+    if test_id is None:
+        if callback.data is None:
+            return
+        parts = callback.data.split(":")
+        if len(parts) < 2:
+            await callback.message.answer("⚠️ Неверный формат данных.")
+            return
+        test_id = int(parts[1])
 
     conn = await asyncpg.connect(DATABASE_URL)
     svc = TestService(conn)
     test_row = await svc.get_test_by_id(test_id)
     if not test_row:
         await conn.close()
-        # Проверяем, что callback.message — это именно Message, прежде чем вызывать .answer()
-        if isinstance(callback.message, Message):
-            await callback.message.answer("❌ Тест не найден.")
+        await callback.message.answer("❌ Тест не найден.")
         return
 
-    # Получаем все вопросы (с позициями и вариантами)
+    # Получаем все вопросы
     questions = await svc.get_questions(test_id)
     questions_data = []
     for q in questions:
@@ -92,7 +96,7 @@ async def start_selected_test(callback: CallbackQuery, state: FSMContext):
         })
     await conn.close()
 
-    # Сохраняем во state: тест и questions
+    # Сохраняем данные во state
     await state.update_data(
         taking_test_id=test_id,
         questions=questions_data,
@@ -100,13 +104,14 @@ async def start_selected_test(callback: CallbackQuery, state: FSMContext):
         correct_count=0
     )
 
-    # Убедимся, что callback.message — это именно Message, прежде чем вызвать ask_question
+    # Убедимся, что callback.message — это Message
     msg = callback.message
     if not isinstance(msg, Message):
         return
 
     await ask_question(msg, state)
     await state.set_state(TestTaking.waiting_for_answer)
+
 
 
 
@@ -135,7 +140,7 @@ async def ask_question(chat_obj: Message, state: FSMContext):
         kb.inline_keyboard.append([btn])
 
     await chat_obj.answer(
-        f"❓ <b>Вопрос {idx+1}:</b> {q['text']}",
+        f"<b>Вопрос {idx+1}:</b> {q['text']}",
         parse_mode="HTML",
         reply_markup=kb
     )
@@ -241,4 +246,5 @@ async def process_answer(callback: CallbackQuery, state: FSMContext):
 
     await state.clear()
 
-
+    from bot.keyboards.learning.menu import testing_menu_keyboard
+    await msg.answer("Меню тестирования:", reply_markup=testing_menu_keyboard())
